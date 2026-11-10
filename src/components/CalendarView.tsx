@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { AppCalendarEvent } from '../types/event.ts'
-import { categoryService, type AppCategoryItem } from '../services/categoryService.ts'
+import { categoryService, type AppCategoryItem, normalizeCategories } from '../services/categoryService.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import { exportEventsToIcs } from '../utils/ics.ts'
 import {
@@ -78,7 +78,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   // Filter events by category
   const filteredEvents = events.filter((e) => {
-    if (selectedCategory !== 'all' && e.category !== selectedCategory) return false
+    if (selectedCategory !== 'all' && !normalizeCategories(e).includes(selectedCategory)) return false
     return true
   })
 
@@ -250,7 +250,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           {categories.map((catItem) => {
             const conf = categoryService.getCategoryStyle(catItem.id)
             const isSelected = selectedCategory === catItem.id
-            const count = events.filter((e) => e.category === catItem.id).length
+            const count = events.filter((e) => normalizeCategories(e).includes(catItem.id)).length
             return (
               <button
                 key={catItem.id}
@@ -338,8 +338,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   {/* Badges container */}
                   <div className="flex-1 space-y-1.5 overflow-hidden">
                     {dayEvents.slice(0, 3).map((evt) => {
-                      const cat = evt.category || 'lavoro'
-                      const conf = categoryService.getCategoryStyle(cat)
+                      const eventCats = normalizeCategories(evt)
+                      const conf = categoryService.getCategoryStyle(eventCats[0])
                       const hasAttachments = Boolean(evt.attachments && evt.attachments.length > 0)
 
                       return (
@@ -352,7 +352,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           className={`flex items-center space-x-1.5 px-2 py-1 rounded-xl text-[10px] font-black border truncate transition hover:scale-[1.03] shadow-xs ${conf.bg} ${conf.text} ${conf.border}`}
                           title={evt.title}
                         >
-                          <span className={`w-2 h-2 rounded-full ${conf.dot} shrink-0 ring-1 ring-white/60`} />
+                          <div className="flex items-center space-x-0.5 shrink-0">
+                            {eventCats.map((c) => {
+                              const s = categoryService.getCategoryStyle(c)
+                              return (
+                                <span key={c} className={`w-1.5 h-1.5 rounded-full ${s.dot} ring-1 ring-white/60`} />
+                              )
+                            })}
+                          </div>
                           <span className="truncate flex-1">
                             {!evt.allDay && formatTimeSafe(evt.start)} {evt.title}
                           </span>
@@ -518,12 +525,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </div>
 
                     <div>
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-lg border ${conf.badge}`}
-                        >
-                          {conf.label}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {normalizeCategories(evt).map((catId) => {
+                          const catConf = categoryService.getCategoryStyle(catId)
+                          return (
+                            <span
+                              key={catId}
+                              className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-lg border ${catConf.badge}`}
+                            >
+                              {catConf.label}
+                            </span>
+                          )
+                        })}
                         {hasAttachments && (
                           <span className="flex items-center space-x-1 text-[10px] font-black text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950/60 px-2 py-0.5 rounded-lg">
                             <Paperclip className="w-3 h-3" />

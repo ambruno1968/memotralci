@@ -20,6 +20,7 @@ export interface AppCalendarEvent {
   end: string // ISO string or YYYY-MM-DD
   allDay: boolean
   category?: EventCategory
+  categories?: string[]
   color?: string
   attachments?: EventAttachment[]
   googleEventId?: string

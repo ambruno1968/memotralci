@@ -15,7 +15,7 @@ import type { AppTaskItem } from '../types/task.ts'
 import { PRIORITY_CONFIG } from '../types/task.ts'
 import type { EventAttachment } from '../types/event.ts'
 import { formatRelativeDate, isToday } from '../utils/date.ts'
-import { categoryService, type AppCategoryItem } from '../services/categoryService.ts'
+import { categoryService, type AppCategoryItem, normalizeCategories } from '../services/categoryService.ts'
 
 interface TaskListViewProps {
   tasks: AppTaskItem[]
@@ -70,7 +70,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
     if (filterStatus === 'todo' && t.completed) return false
     if (filterStatus === 'completed' && !t.completed) return false
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false
-    if (filterCategory !== 'all' && (t.category || 'lavoro') !== filterCategory) return false
+    if (filterCategory !== 'all' && !normalizeCategories(t).includes(filterCategory)) return false
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
@@ -289,19 +289,19 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                         {pConf.label}
                       </span>
 
-                      {/* Category Badge */}
-                      {(() => {
-                        const cat = task.category || 'lavoro'
-                        const catConf = categoryService.getCategoryStyle(cat)
+                      {/* Category Badges (supporto multi-categoria) */}
+                      {normalizeCategories(task).map((catId) => {
+                        const catConf = categoryService.getCategoryStyle(catId)
                         return (
                           <span
-                            className={`flex items-center space-x-1 text-[10px] font-bold px-2.5 py-0.5 rounded-lg border ${catConf.bg} ${catConf.text} ${catConf.border}`}
+                            key={catId}
+                            className={`flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${catConf.bg} ${catConf.text} ${catConf.border}`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${catConf.dot}`} />
                             <span className="truncate max-w-[120px]">{catConf.label}</span>
                           </span>
                         )
-                      })()}
+                      })}
 
                       {/* Due Date */}
                       {task.dueDate && (

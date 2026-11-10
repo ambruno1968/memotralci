@@ -14,11 +14,12 @@ import {
   Mic,
   Music,
 } from 'lucide-react'
-import type { AppCalendarEvent, EventCategory, EventAttachment } from '../types/event.ts'
+import type { AppCalendarEvent, EventAttachment } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { formatFileSize, getFileTypeCategory } from '../utils/file.ts'
 import { AudioRecorder } from './AudioRecorder.tsx'
 import { CategoryPicker } from './CategoryPicker.tsx'
+import { normalizeCategories } from '../services/categoryService.ts'
 
 interface EventModalProps {
   event?: AppCalendarEvent | null
@@ -56,12 +57,25 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [end, setEnd] = useState(
     event ? (event.allDay ? event.end.slice(0, 10) : event.end.slice(0, 16)) : defaultEnd
   )
-  const [category, setCategory] = useState<EventCategory>(event?.category || 'lavoro')
+  const [categories, setCategories] = useState<string[]>(() => normalizeCategories(event))
   const [attachments, setAttachments] = useState<EventAttachment[]>(event?.attachments || [])
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [showAudioRecorder, setShowAudioRecorder] = useState(false)
+
+  async function handleRemoveAttachment(att: EventAttachment) {
+    const ok = window.confirm(
+      `Vuoi eliminare definitivamente l'allegato "${att.name}" anche da Google Drive / archivio?`
+    )
+    if (!ok) return
+    setAttachments((prev) => prev.filter((a) => a.id !== att.id))
+    try {
+      await api.deleteAttachment(att.id)
+    } catch (e) {
+      console.warn('Errore cancellazione fisica allegato:', e)
+    }
+  }
 
   async function handleFileUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -112,10 +126,6 @@ export const EventModal: React.FC<EventModalProps> = ({
     }
   }
 
-  function handleRemoveAttachment(id: string) {
-    setAttachments((prev) => prev.filter((a) => a.id !== id))
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim()) return
@@ -129,7 +139,8 @@ export const EventModal: React.FC<EventModalProps> = ({
         start,
         end,
         allDay,
-        category,
+        categories,
+        category: categories.join(','),
         attachments,
       }
 
@@ -195,8 +206,8 @@ export const EventModal: React.FC<EventModalProps> = ({
             />
           </div>
 
-          {/* Categorie */}
-          <CategoryPicker value={category} onChange={setCategory} />
+          {/* Categorie (Multi-selezione) */}
+          <CategoryPicker values={categories} onChange={setCategories} />
 
           {/* Tutto il giorno toggle */}
           <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
@@ -411,9 +422,9 @@ export const EventModal: React.FC<EventModalProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => handleRemoveAttachment(att.id)}
+                        onClick={() => handleRemoveAttachment(att)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition ml-2"
-                        title="Rimuovi allegato"
+                        title="Elimina definitivamente l'allegato anche da Google Drive"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -431,7 +442,11 @@ export const EventModal: React.FC<EventModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                if (confirm('Sei sicuro di voler eliminare questo evento dal calendario?')) {
+                const msg =
+                  attachments.length > 0
+                    ? 'Sei sicuro di voler eliminare questo evento dal calendario? Verranno rimossi anche i relativi allegati collegati.'
+                    : 'Sei sicuro di voler eliminare questo evento dal calendario?'
+                if (confirm(msg)) {
                   onDelete(event!.id)
                   onClose()
                 }

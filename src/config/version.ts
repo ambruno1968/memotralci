@@ -1,7 +1,7 @@
 // Configurazione Versione e Crediti MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v1.1.1'
+export const APP_VERSION = 'v1.2.0'
 
 export interface AppCredits {
   appName: string
@@ -16,7 +16,7 @@ export interface AppCredits {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '1.1.1',
+  version: '1.2.0',
   releaseDate: '10 Novembre 2026',
   developedFor: 'Segreteria Come Tralci Novara',
   organization: 'Associazione Come Tralci - Novara',

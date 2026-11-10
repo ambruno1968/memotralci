@@ -432,6 +432,22 @@ export const api = {
 
   async deleteTask(taskId: string): Promise<boolean> {
     markTaskAsDeleted(taskId)
+
+    // Recupera il task per eliminare fisicamente gli eventuali allegati collegati
+    try {
+      const all = await localDB.getAllTasks()
+      const target = all.find((t) => t.id === taskId)
+      if (target?.attachments && target.attachments.length > 0) {
+        for (const att of target.attachments) {
+          if (att?.id) {
+            try {
+              await this.deleteAttachment(att.id)
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
     await localDB.deleteTask(taskId)
     const remainingTasks = (await localDB.getAllTasks()).filter((t) => t.id !== taskId && !getDeletedTaskIds().has(t.id))
     await localDB.saveTasks(remainingTasks)
@@ -576,8 +592,20 @@ export const api = {
     return localFiles
   },
 
-  // Delete Attachment
+  // Delete Attachment fisicamente da Google Drive, server e database locale
   async deleteAttachment(id: string): Promise<boolean> {
+    if (!id) return false
+
+    // 1. Eliminazione fisica da Google Drive (se autenticato)
+    try {
+      if (googleClientSide.isConnected()) {
+        await googleClientSide.deleteDriveFile(id)
+      }
+    } catch (e) {
+      console.warn('[API] Errore cancellazione file da Google Drive:', e)
+    }
+
+    // 2. Eliminazione fisica dal server locale se in esecuzione
     try {
       await fetch(`/api/files/${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -586,6 +614,8 @@ export const api = {
     } catch {
       // Fallback
     }
+
+    // 3. Eliminazione da cache IndexedDB locale
     await localDB.deleteAttachment(id)
     return true
   },

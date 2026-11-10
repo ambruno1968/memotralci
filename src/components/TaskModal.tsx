@@ -15,13 +15,14 @@ import {
   Mic,
   Music,
 } from 'lucide-react'
-import type { AppTaskItem, TaskPriority, TaskCategory } from '../types/task.ts'
+import type { AppTaskItem, TaskPriority } from '../types/task.ts'
 import { PRIORITY_CONFIG } from '../types/task.ts'
 import type { EventAttachment } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { getFileTypeCategory } from '../utils/file.ts'
 import { AudioRecorder } from './AudioRecorder.tsx'
 import { CategoryPicker } from './CategoryPicker.tsx'
+import { normalizeCategories } from '../services/categoryService.ts'
 
 interface TaskModalProps {
   task?: AppTaskItem | null
@@ -46,7 +47,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [description, setDescription] = useState(task?.description || '')
   const [dueDate, setDueDate] = useState(task?.dueDate || '')
   const [priority, setPriority] = useState<TaskPriority>(task?.priority || 'media')
-  const [category, setCategory] = useState<TaskCategory>(task?.category || 'lavoro')
+  const [categories, setCategories] = useState<string[]>(() => normalizeCategories(task))
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>(
     task?.subtasks || []
   )
@@ -56,6 +57,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [dragActive, setDragActive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showAudioRecorder, setShowAudioRecorder] = useState(false)
+
+  async function handleDeleteAttachment(att: EventAttachment) {
+    const ok = window.confirm(
+      `Vuoi eliminare definitivamente l'allegato "${att.name}" anche da Google Drive / archivio?`
+    )
+    if (!ok) return
+    setAttachments((prev) => prev.filter((a) => a.id !== att.id))
+    try {
+      await api.deleteAttachment(att.id)
+    } catch (err) {
+      console.warn('Errore eliminazione fisica allegato:', err)
+    }
+  }
 
   async function handleFileUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -142,7 +156,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         completed: task?.completed ?? false,
         dueDate: dueDate || undefined,
         priority,
-        category,
+        categories,
+        category: categories.join(','),
         subtasks,
         attachments,
         calendarEventId: task?.calendarEventId,
@@ -245,8 +260,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
           </div>
 
-          {/* Categoria Gestibile */}
-          <CategoryPicker value={category} onChange={setCategory} />
+          {/* Categorie Gestibili (Multi-selezione) */}
+          <CategoryPicker values={categories} onChange={setCategories} />
 
           {/* Descrizione / Note */}
           <div>
@@ -448,10 +463,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          setAttachments((prev) => prev.filter((a) => a.id !== att.id))
-                        }
+                        onClick={() => handleDeleteAttachment(att)}
                         className="p-1 text-slate-400 hover:text-rose-500 rounded ml-2"
+                        title="Elimina definitivamente l'allegato anche da Google Drive"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -470,7 +484,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm('Vuoi eliminare questa attività?')) {
+                  const msg =
+                    attachments.length > 0
+                      ? 'Vuoi eliminare questa attività? Verranno eliminati fisicamente anche gli allegati collegati da Google Drive.'
+                      : 'Vuoi eliminare questa attività?'
+                  if (confirm(msg)) {
                     onDelete(task!.id)
                     onClose()
                   }

@@ -973,6 +973,24 @@ class GoogleClientSide {
       return false
     }
   }
+
+  /**
+   * Elimina fisicamente un file da Google Drive (es. allegato eliminato da un task)
+   */
+  public async deleteDriveFile(fileId: string): Promise<boolean> {
+    const token = this.getToken()
+    if (!token || !fileId) return false
+    try {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      return res.ok || res.status === 404
+    } catch (e) {
+      console.warn('[Google Drive] Errore cancellazione fisica file:', e)
+      return false
+    }
+  }
 }
 
 export const googleClientSide = new GoogleClientSide()

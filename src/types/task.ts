@@ -17,6 +17,7 @@ export interface AppTaskItem {
   dueDate?: string // YYYY-MM-DD
   priority: TaskPriority
   category?: TaskCategory
+  categories?: string[]
   subtasks?: SubtaskItem[]
   attachments?: EventAttachment[]
   calendarEventId?: string // Link to calendar event if created

@@ -103,17 +103,15 @@ export const COLOR_PALETTE: Record<CategoryColorName, { label: string; badge: st
   },
 }
 
-const DEFAULT_CATEGORIES: AppCategoryItem[] = [
-  { id: 'lavoro', label: 'Lavoro', color: 'teal', isDefault: true },
-  { id: 'vigneto', label: 'Vigneto & Cantina', color: 'purple', isDefault: true },
-  { id: 'personale', label: 'Personale', color: 'emerald', isDefault: true },
-  { id: 'riunione', label: 'Riunione', color: 'sky', isDefault: true },
-  { id: 'spesa', label: 'Fornitori & Spesa', color: 'amber', isDefault: true },
-  { id: 'urgente', label: 'Urgente', color: 'rose', isDefault: true },
-  { id: 'altro', label: 'Altro', color: 'slate', isDefault: true },
+export const DEFAULT_CATEGORIES: AppCategoryItem[] = [
+  { id: 'prog_vita', label: 'Prog,Vita', color: 'purple', isDefault: true },
+  { id: 'segreteria', label: 'Segreteria', color: 'sky', isDefault: true },
+  { id: 'chiesa', label: 'Chiesa', color: 'amber', isDefault: true },
+  { id: 'missione', label: 'Missione', color: 'rose', isDefault: true },
+  { id: 'giovani', label: 'Giovani', color: 'emerald', isDefault: true },
 ]
 
-const STORAGE_KEY = 'memotralci_custom_categories'
+const STORAGE_KEY = 'memotralci_custom_categories_v2'
 type Listener = (cats: AppCategoryItem[]) => void
 const listeners = new Set<Listener>()
 
@@ -130,19 +128,14 @@ class CategoryService {
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Unisci con i default se mancano
-          const ids = new Set(parsed.map((p) => p.id))
-          for (const d of DEFAULT_CATEGORIES) {
-            if (!ids.has(d.id)) {
-              parsed.push(d)
-            }
-          }
           this.categories = parsed
           return
         }
       }
     } catch {}
-    this.categories = [...DEFAULT_CATEGORIES]
+    // Inizializzazione con le nuove categorie default
+    this.categories = DEFAULT_CATEGORIES.map((c) => ({ ...c }))
+    this.save()
   }
 
   private save() {
@@ -192,14 +185,38 @@ class CategoryService {
     return newCat
   }
 
+  public updateCategory(id: string, newLabel: string, newColor?: CategoryColorName): AppCategoryItem | null {
+    const trimmed = newLabel.trim()
+    if (!trimmed) return null
+
+    const index = this.categories.findIndex((c) => c.id === id)
+    if (index === -1) return null
+
+    this.categories[index] = {
+      ...this.categories[index],
+      label: trimmed,
+      color: newColor || this.categories[index].color,
+    }
+
+    this.save()
+    return this.categories[index]
+  }
+
   public deleteCategory(id: string): boolean {
     const prevLen = this.categories.length
+    // Permette di eliminare qualsiasi categoria senza intaccare i task
     this.categories = this.categories.filter((c) => c.id !== id)
     if (this.categories.length !== prevLen) {
       this.save()
       return true
     }
     return false
+  }
+
+  public resetToDefaults(): AppCategoryItem[] {
+    this.categories = DEFAULT_CATEGORIES.map((c) => ({ ...c }))
+    this.save()
+    return [...this.categories]
   }
 
   public getCategoryStyle(catIdOrName?: string): CategoryStyle {
@@ -238,4 +255,33 @@ class CategoryService {
 }
 
 export const categoryService = new CategoryService()
+
+/**
+ * Normalizza le categorie di un task o evento in un array di stringhe pulito.
+ * Supporta sia il formato singolo (es. "prog_vita"), sia una lista separata da virgole,
+ * sia un array esplicito `categories: string[]`.
+ */
+export function normalizeCategories(item?: { category?: string; categories?: string[] } | null): string[] {
+  if (!item) return ['prog_vita']
+  const result: string[] = []
+
+  if (Array.isArray(item.categories)) {
+    for (const c of item.categories) {
+      if (typeof c === 'string' && c.trim() && !result.includes(c.trim())) {
+        result.push(c.trim())
+      }
+    }
+  }
+
+  if (typeof item.category === 'string' && item.category.trim()) {
+    const parts = item.category.split(',').map((p) => p.trim()).filter(Boolean)
+    for (const p of parts) {
+      if (!result.includes(p)) {
+        result.push(p)
+      }
+    }
+  }
+
+  return result.length > 0 ? result : ['prog_vita']
+}
 
