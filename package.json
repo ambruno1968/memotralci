@@ -1,0 +1,52 @@
+{
+  "name": "memotralci",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n \"server,client\" -c \"cyan,magenta\" \"npm run server:dev\" \"npm run client:dev\"",
+    "client:dev": "vite",
+    "client:build": "tsc -b && vite build",
+    "server:dev": "tsx watch server/index.ts",
+    "server:start": "tsx server/index.ts",
+    "build": "npm run client:build",
+    "start": "tsx server/index.ts",
+    "generate-icons": "node scripts/generate-icons.js",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/canvas-confetti": "^1.9.0",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "concurrently": "^10.0.7",
+    "cors": "^2.8.6",
+    "date-fns": "^4.4.0",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "googleapis": "^189.0.0",
+    "idb": "^8.0.4",
+    "lucide-react": "^1.71.0",
+    "multer": "^2.5.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.5",
+    "vite-plugin-pwa": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.90.0",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}

@@ -1,0 +1,354 @@
+import { useState, useEffect } from 'react'
+import { Navbar, type NavView } from './components/Navbar.tsx'
+import { CalendarView } from './components/CalendarView.tsx'
+import { TaskListView } from './components/TaskListView.tsx'
+import { AttachmentsView } from './components/AttachmentsView.tsx'
+import { EventModal } from './components/EventModal.tsx'
+import { TaskModal } from './components/TaskModal.tsx'
+import { AttachmentModal } from './components/AttachmentModal.tsx'
+import { GoogleSettingsModal } from './components/GoogleSettingsModal.tsx'
+import { PwaInstallBanner } from './components/PwaInstallBanner.tsx'
+import type { AppCalendarEvent } from './types/event.ts'
+import type { AppTaskItem } from './types/task.ts'
+import type { UploadedAttachment } from './types/attachment.ts'
+import { api, type GoogleStatus } from './services/api.ts'
+import { Loader2 } from 'lucide-react'
+
+export function App() {
+  const [currentView, setCurrentView] = useState<NavView>('calendar')
+  const [events, setEvents] = useState<AppCalendarEvent[]>([])
+  const [tasks, setTasks] = useState<AppTaskItem[]>([])
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>([])
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatus>({
+    isOnline: false,
+    isGoogleConfigured: false,
+    calendarId: null,
+    driveFolderId: null,
+    serviceAccountConfigured: false,
+  })
+  const [loading, setLoading] = useState(true)
+
+  // Modals state
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState<AppCalendarEvent | null>(null)
+  const [eventInitialDate, setEventInitialDate] = useState<string | undefined>()
+
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<AppTaskItem | null>(null)
+
+  const [isGoogleSettingsOpen, setIsGoogleSettingsOpen] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState<any | null>(null)
+
+  // PWA Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [canInstallPwa, setCanInstallPwa] = useState(false)
+
+  // Listen for PWA beforeinstallprompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setCanInstallPwa(true)
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    }
+  }, [])
+
+  function handleInstallPwa() {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
+      if (choiceResult.outcome === 'accepted') {
+        setCanInstallPwa(false)
+      }
+      setDeferredPrompt(null)
+    })
+  }
+
+  // Load Initial Data
+  async function loadAllData() {
+    try {
+      const [status, fetchedEvents, fetchedTasks, fetchedAttachments] = await Promise.all([
+        api.getStatus(),
+        api.getEvents(),
+        api.getTasks(),
+        api.getAttachments(),
+      ])
+
+      setGoogleStatus(status)
+      setEvents(fetchedEvents)
+      setTasks(fetchedTasks)
+      setAttachments(fetchedAttachments)
+    } catch (err) {
+      console.error('Errore caricamento dati:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAllData()
+  }, [])
+
+  // Event handlers
+  function handleOpenEventModal(event?: AppCalendarEvent, initialDate?: string) {
+    setSelectedEvent(event || null)
+    setEventInitialDate(initialDate)
+    setIsEventModalOpen(true)
+  }
+
+  function handleSaveEvent(savedEvent: AppCalendarEvent) {
+    setEvents((prev) => {
+      const exists = prev.some((e) => e.id === savedEvent.id)
+      if (exists) {
+        return prev.map((e) => (e.id === savedEvent.id ? savedEvent : e))
+      }
+      return [savedEvent, ...prev]
+    })
+
+    // If event has attachments, add them to global attachments list if not already there
+    if (savedEvent.attachments && savedEvent.attachments.length > 0) {
+      setAttachments((prev) => {
+        const existingIds = new Set(prev.map((a) => a.id))
+        const newOnes = savedEvent.attachments!
+          .filter((a) => !existingIds.has(a.id))
+          .map((a) => ({
+            id: a.id,
+            name: a.name,
+            mimeType: a.mimeType,
+            size: a.size,
+            webViewLink: a.webViewLink,
+            webContentLink: a.webContentLink,
+            createdTime: new Date().toISOString(),
+            isLocal: a.isLocal,
+          }))
+        return [...newOnes, ...prev]
+      })
+    }
+  }
+
+  async function handleDeleteEvent(eventId: string) {
+    await api.deleteEvent(eventId)
+    setEvents((prev) => prev.filter((e) => e.id !== eventId))
+  }
+
+  // Task handlers
+  function handleOpenTaskModal(task?: AppTaskItem) {
+    setSelectedTask(task || null)
+    setIsTaskModalOpen(true)
+  }
+
+  async function handleSaveTask(task: AppTaskItem) {
+    let updatedTasks: AppTaskItem[] = []
+    setTasks((prev) => {
+      const exists = prev.some((t) => t.id === task.id)
+      if (exists) {
+        updatedTasks = prev.map((t) => (t.id === task.id ? task : t))
+      } else {
+        updatedTasks = [task, ...prev]
+      }
+      return updatedTasks
+    })
+
+    await api.saveTasks(updatedTasks)
+
+    // Sync task attachments to global list
+    if (task.attachments && task.attachments.length > 0) {
+      setAttachments((prev) => {
+        const existingIds = new Set(prev.map((a) => a.id))
+        const newOnes = task.attachments!
+          .filter((a) => !existingIds.has(a.id))
+          .map((a) => ({
+            id: a.id,
+            name: a.name,
+            mimeType: a.mimeType,
+            size: a.size,
+            webViewLink: a.webViewLink,
+            webContentLink: a.webContentLink,
+            createdTime: new Date().toISOString(),
+            isLocal: a.isLocal,
+          }))
+        return [...newOnes, ...prev]
+      })
+    }
+  }
+
+  async function handleToggleTask(taskId: string) {
+    let updatedTasks: AppTaskItem[] = []
+    setTasks((prev) => {
+      updatedTasks = prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
+      return updatedTasks
+    })
+    await api.saveTasks(updatedTasks)
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    let updatedTasks: AppTaskItem[] = []
+    setTasks((prev) => {
+      updatedTasks = prev.filter((t) => t.id !== taskId)
+      return updatedTasks
+    })
+    await api.saveTasks(updatedTasks)
+  }
+
+  async function handleQuickAddTask(title: string) {
+    const newTask: AppTaskItem = {
+      id: `task_${Date.now()}`,
+      title,
+      completed: false,
+      priority: 'media',
+      category: 'lavoro',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    const updated = [newTask, ...tasks]
+    setTasks(updated)
+    await api.saveTasks(updated)
+  }
+
+  // Create Calendar Event from Task
+  async function handleCreateCalendarEventFromTask(task: AppTaskItem) {
+    if (!task.dueDate) return
+    const newEvt = await api.createEvent({
+      title: `Task: ${task.title}`,
+      description: task.description || '',
+      start: task.dueDate,
+      end: task.dueDate,
+      allDay: true,
+      category: 'lavoro',
+      attachments: task.attachments,
+    })
+    setEvents((prev) => [newEvt, ...prev])
+    alert(`Evento creato nel calendario per il ${task.dueDate}!`)
+  }
+
+  // Attachment handlers
+  async function handleUploadFile(file: File) {
+    const uploaded = await api.uploadFile(file)
+    setAttachments((prev) => [uploaded, ...prev])
+    return uploaded
+  }
+
+  async function handleDeleteAttachment(id: string) {
+    await api.deleteAttachment(id)
+    setAttachments((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  const pendingTasksCount = tasks.filter((t) => !t.completed).length
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition">
+      {/* PWA Install Banner */}
+      <PwaInstallBanner canInstall={canInstallPwa} onInstall={handleInstallPwa} />
+
+      {/* Navbar */}
+      <Navbar
+        currentView={currentView}
+        onSelectView={setCurrentView}
+        onOpenGoogleSettings={() => setIsGoogleSettingsOpen(true)}
+        onOpenEventModal={() => handleOpenEventModal()}
+        onOpenTaskModal={() => handleOpenTaskModal()}
+        googleStatus={googleStatus}
+        attachmentsCount={attachments.length}
+        tasksPendingCount={pendingTasksCount}
+        canInstallPwa={canInstallPwa}
+        onInstallPwa={handleInstallPwa}
+      />
+
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+            <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-3" />
+            <p className="text-sm font-semibold">Caricamento MemoTralci...</p>
+          </div>
+        ) : (
+          <>
+            {currentView === 'calendar' && (
+              <CalendarView
+                events={events}
+                tasks={tasks}
+                onOpenEventModal={handleOpenEventModal}
+                onOpenTaskModal={handleOpenTaskModal}
+              />
+            )}
+
+            {currentView === 'tasks' && (
+              <TaskListView
+                tasks={tasks}
+                onToggleTask={handleToggleTask}
+                onOpenTaskModal={handleOpenTaskModal}
+                onDeleteTask={handleDeleteTask}
+                onPreviewAttachment={(att) => setPreviewAttachment(att)}
+                onCreateCalendarEvent={handleCreateCalendarEventFromTask}
+                onQuickAddTask={handleQuickAddTask}
+              />
+            )}
+
+            {currentView === 'attachments' && (
+              <AttachmentsView
+                attachments={attachments}
+                onUploadFile={handleUploadFile}
+                onDeleteAttachment={handleDeleteAttachment}
+                onPreviewAttachment={(att) => setPreviewAttachment(att)}
+                isGoogleDriveConfigured={googleStatus.isGoogleConfigured}
+              />
+            )}
+          </>
+        )}
+      </main>
+
+      {/* Modals */}
+      {isEventModalOpen && (
+        <EventModal
+          event={selectedEvent}
+          initialDate={eventInitialDate}
+          onClose={() => {
+            setIsEventModalOpen(false)
+            setSelectedEvent(null)
+          }}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onPreviewAttachment={(att) => setPreviewAttachment(att)}
+        />
+      )}
+
+      {isTaskModalOpen && (
+        <TaskModal
+          task={selectedTask}
+          onClose={() => {
+            setIsTaskModalOpen(false)
+            setSelectedTask(null)
+          }}
+          onSave={handleSaveTask}
+          onDelete={handleDeleteTask}
+          onPreviewAttachment={(att) => setPreviewAttachment(att)}
+          onCreateCalendarEventFromTask={handleCreateCalendarEventFromTask}
+        />
+      )}
+
+      {isGoogleSettingsOpen && (
+        <GoogleSettingsModal
+          status={googleStatus}
+          onClose={() => setIsGoogleSettingsOpen(false)}
+          onRefreshStatus={async () => {
+            const updated = await api.getStatus()
+            setGoogleStatus(updated)
+          }}
+        />
+      )}
+
+      {previewAttachment && (
+        <AttachmentModal
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+export default App

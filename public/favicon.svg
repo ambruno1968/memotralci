@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="grad-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="grad-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#1e1b4b" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded app icon -->
+  <rect width="512" height="512" rx="112" fill="url(#grad-bg)"/>
+
+  <!-- Calendar card -->
+  <g filter="url(#shadow)">
+    <rect x="76" y="96" width="360" height="320" rx="36" fill="url(#grad-card)"/>
+    
+    <!-- Top calendar header banner -->
+    <path d="M 76 132 C 76 112 92 96 112 96 L 400 96 C 420 96 436 112 436 132 L 436 176 L 76 176 Z" fill="#4338ca"/>
+    
+    <!-- Binder rings -->
+    <rect x="140" y="72" width="24" height="48" rx="12" fill="#e0e7ff"/>
+    <rect x="244" y="72" width="24" height="48" rx="12" fill="#e0e7ff"/>
+    <rect x="348" y="72" width="24" height="48" rx="12" fill="#e0e7ff"/>
+
+    <!-- Calendar Month Dots / Lines -->
+    <circle cx="136" cy="226" r="12" fill="#10b981"/>
+    <circle cx="196" cy="226" r="12" fill="#6366f1"/>
+    <circle cx="256" cy="226" r="12" fill="#cbd5e1"/>
+    <circle cx="316" cy="226" r="12" fill="#cbd5e1"/>
+    <circle cx="376" cy="226" r="12" fill="#cbd5e1"/>
+
+    <!-- Checked task item -->
+    <rect x="120" y="272" width="272" height="44" rx="12" fill="#f1f5f9"/>
+    <path d="M 142 294 L 152 304 L 172 284" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="192" y1="294" x2="368" y2="294" stroke="#475569" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- Second task item with attachment icon -->
+    <rect x="120" y="332" width="272" height="44" rx="12" fill="#eef2ff"/>
+    <circle cx="152" cy="354" r="10" stroke="#6366f1" stroke-width="4" fill="none"/>
+    <line x1="184" y1="354" x2="310" y2="354" stroke="#6366f1" stroke-width="6" stroke-linecap="round"/>
+    
+    <!-- Attachment clip symbol -->
+    <path d="M 360 344 C 365 339 373 339 378 344 C 383 349 383 357 378 362 L 356 384 C 347 393 333 393 324 384 C 315 375 315 361 324 352 L 344 332 C 349 327 357 327 362 332 C 367 337 367 345 362 350 L 342 370" 
+          stroke="#4f46e5" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>
