@@ -4,6 +4,7 @@
 
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
+import type { AppTaskItem, SubtaskItem } from '../types/task.ts'
 
 export interface GoogleUserInfo {
   id?: string
@@ -23,6 +24,7 @@ export const GOOGLE_DEFAULTS = {
   scopes: [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/tasks',
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
@@ -580,6 +582,220 @@ class GoogleClientSide {
       isLocal: false,
     }))
   }
+  // ==========================================
+  // GOOGLE TASKS DIRECT INTEGRATION (Google Calendar Tasks)
+  // ==========================================
+
+  private formatTaskNotes(task: AppTaskItem): string {
+    const lines: string[] = []
+    if (task.description && task.description.trim()) {
+      lines.push(task.description.trim())
+    }
+    const tags: string[] = []
+    if (task.priority) tags.push(`[Priorità: ${task.priority}]`)
+    if (task.category) tags.push(`[Categoria: ${task.category}]`)
+    if (tags.length > 0) {
+      lines.push('')
+      lines.push(tags.join(' '))
+    }
+    if (task.subtasks && task.subtasks.length > 0) {
+      lines.push('')
+      lines.push('Sotto-attività:')
+      for (const st of task.subtasks) {
+        lines.push(`- [${st.completed ? 'x' : ' '}] ${st.title}`)
+      }
+    }
+    return lines.join('\n')
+  }
+
+  private parseTaskNotes(notes: string | undefined): {
+    description: string
+    priority: 'bassa' | 'media' | 'alta' | 'urgente'
+    category: 'lavoro' | 'personale' | 'spesa' | 'progetto' | 'altro'
+    subtasks: SubtaskItem[]
+  } {
+    if (!notes) {
+      return { description: '', priority: 'media', category: 'lavoro', subtasks: [] }
+    }
+
+    let priority: any = 'media'
+    const prioMatch = notes.match(/\[Priorità:\s*(\w+)\]/i)
+    if (prioMatch && ['bassa', 'media', 'alta', 'urgente'].includes(prioMatch[1].toLowerCase())) {
+      priority = prioMatch[1].toLowerCase()
+    }
+
+    let category: any = 'lavoro'
+    const catMatch = notes.match(/\[Categoria:\s*(\w+)\]/i)
+    if (catMatch && ['lavoro', 'personale', 'spesa', 'progetto', 'altro'].includes(catMatch[1].toLowerCase())) {
+      category = catMatch[1].toLowerCase()
+    }
+
+    const subtasks: SubtaskItem[] = []
+    const rawLines = notes.split('\n')
+    const descLines: string[] = []
+
+    for (const line of rawLines) {
+      const stMatch = line.match(/^-\s*\[([ xX])\]\s*(.+)$/)
+      if (stMatch) {
+        subtasks.push({
+          id: `st_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          title: stMatch[2].trim(),
+          completed: stMatch[1].toLowerCase() === 'x',
+        })
+      } else if (!line.includes('[Priorità:') && !line.includes('[Categoria:') && !line.trim().startsWith('Sotto-attività:')) {
+        descLines.push(line)
+      }
+    }
+
+    return {
+      description: descLines.join('\n').trim(),
+      priority,
+      category,
+      subtasks,
+    }
+  }
+
+  public async getGoogleTasks(): Promise<AppTaskItem[]> {
+    const token = this.getToken()
+    if (!token) return []
+
+    try {
+      const res = await fetch(
+        'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?showCompleted=true&showHidden=true&maxResults=100',
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      if (!res.ok) {
+        if (res.status === 401) this.clearToken()
+        return []
+      }
+
+      const data = await res.json()
+      const items: any[] = data.items || []
+
+      return items.map((t) => {
+        const parsed = this.parseTaskNotes(t.notes)
+        const isCompleted = t.status === 'completed'
+        const dueDate = t.due ? t.due.split('T')[0] : undefined
+
+        return {
+          id: t.id,
+          googleTaskId: t.id,
+          title: t.title || '(Senza titolo)',
+          description: parsed.description,
+          completed: isCompleted,
+          dueDate,
+          priority: parsed.priority,
+          category: parsed.category,
+          subtasks: parsed.subtasks,
+          createdAt: t.updated || new Date().toISOString(),
+          updatedAt: t.updated || new Date().toISOString(),
+        }
+      })
+    } catch (e) {
+      console.warn('[Google Tasks] Errore lettura attività:', e)
+      return []
+    }
+  }
+
+  public async createGoogleTask(task: AppTaskItem): Promise<AppTaskItem> {
+    const token = this.getToken()
+    if (!token) throw new Error('Account Google non connesso')
+
+    const notes = this.formatTaskNotes(task)
+    const body: any = {
+      title: task.title,
+      notes,
+      status: task.completed ? 'completed' : 'needsAction',
+    }
+
+    if (task.dueDate) {
+      body.due = `${task.dueDate}T00:00:00.000Z`
+    }
+
+    const res = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      throw new Error(`Errore creazione attività su Google Tasks: ${res.statusText}`)
+    }
+
+    const created = await res.json()
+    return {
+      ...task,
+      id: created.id,
+      googleTaskId: created.id,
+      updatedAt: created.updated || new Date().toISOString(),
+    }
+  }
+
+  public async updateGoogleTask(task: AppTaskItem): Promise<AppTaskItem> {
+    const token = this.getToken()
+    if (!token) return task
+
+    const taskId = task.googleTaskId || task.id
+    const notes = this.formatTaskNotes(task)
+    const body: any = {
+      id: taskId,
+      title: task.title,
+      notes,
+      status: task.completed ? 'completed' : 'needsAction',
+    }
+
+    if (task.dueDate) {
+      body.due = `${task.dueDate}T00:00:00.000Z`
+    } else {
+      body.due = null
+    }
+
+    const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      console.warn(`[Google Tasks] Errore aggiornamento (${res.status}): ${res.statusText}`)
+      return task
+    }
+
+    const updated = await res.json()
+    return {
+      ...task,
+      googleTaskId: updated.id,
+      updatedAt: updated.updated || new Date().toISOString(),
+    }
+  }
+
+  public async deleteGoogleTask(taskId: string): Promise<boolean> {
+    const token = this.getToken()
+    if (!token) return true
+
+    try {
+      const res = await fetch(
+        `https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${encodeURIComponent(taskId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+      return res.ok || res.status === 404
+    } catch {
+      return false
+    }
+  }
 }
 
 export const googleClientSide = new GoogleClientSide()
+

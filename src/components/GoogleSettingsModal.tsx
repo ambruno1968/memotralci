@@ -241,7 +241,7 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
                 </div>
 
                 {/* Dettagli configurazione preimpostata */}
-                <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
                     <Calendar className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
                     <div>
@@ -252,10 +252,19 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Cose da Fare</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        Google Tasks
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
                     <FolderOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <div>
                       <div className="text-[10px] uppercase font-bold text-slate-400">Cartella Drive</div>
-                      <div className="font-semibold text-slate-900 dark:text-white">
+                      <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[110px]">
                         {GOOGLE_DEFAULTS.driveFolderName}
                       </div>
                     </div>

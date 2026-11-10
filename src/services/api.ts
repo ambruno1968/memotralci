@@ -274,8 +274,42 @@ export const api = {
     return true
   },
 
-  // Tasks
+  // Tasks - Direct Google Tasks Sync (Sincronizzato con Google Calendar Tasks)
   async getTasks(): Promise<AppTaskItem[]> {
+    const localTasks = await localDB.getAllTasks()
+
+    // 1. Direct Client-Side Google Tasks Sync
+    if (googleClientSide.isConnected()) {
+      try {
+        const googleTasks = await googleClientSide.getGoogleTasks()
+        const googleTaskMap = new Map(googleTasks.map((t) => [t.id, t]))
+
+        const merged: AppTaskItem[] = [...googleTasks]
+        const mergedIds = new Set(googleTasks.map((t) => t.id))
+
+        // Cerca task locali non ancora presenti su Google Tasks
+        for (const lt of localTasks) {
+          const matched = lt.googleTaskId ? googleTaskMap.get(lt.googleTaskId) : null
+          if (!matched && !mergedIds.has(lt.id)) {
+            // Task creato in locale: caricalo su Google Tasks se siamo online
+            try {
+              const uploaded = await googleClientSide.createGoogleTask(lt)
+              merged.push(uploaded)
+              mergedIds.add(uploaded.id)
+            } catch {
+              merged.push(lt)
+            }
+          }
+        }
+
+        await localDB.saveTasks(merged)
+        return merged
+      } catch (err) {
+        console.warn('[Google Tasks] Errore sincronizzazione diretta con Google Tasks:', err)
+      }
+    }
+
+    // 2. Server API fallback
     try {
       const res = await fetch('/api/tasks', { signal: AbortSignal.timeout(3000) })
       if (res.ok) {
@@ -286,7 +320,54 @@ export const api = {
     } catch {
       // Fallback
     }
-    return localDB.getAllTasks()
+    return localTasks
+  },
+
+  async createTask(taskData: AppTaskItem): Promise<AppTaskItem> {
+    let finalTask = { ...taskData }
+
+    if (googleClientSide.isConnected()) {
+      try {
+        finalTask = await googleClientSide.createGoogleTask(finalTask)
+      } catch (err) {
+        console.warn('[Google Tasks] Errore creazione remota:', err)
+      }
+    }
+
+    await localDB.saveTask(finalTask)
+    return finalTask
+  },
+
+  async saveTask(task: AppTaskItem): Promise<AppTaskItem> {
+    let finalTask = { ...task, updatedAt: new Date().toISOString() }
+
+    if (googleClientSide.isConnected()) {
+      try {
+        if (finalTask.googleTaskId || !finalTask.id.startsWith('task_')) {
+          finalTask = await googleClientSide.updateGoogleTask(finalTask)
+        } else {
+          finalTask = await googleClientSide.createGoogleTask(finalTask)
+        }
+      } catch (err) {
+        console.warn('[Google Tasks] Errore salvataggio remoto:', err)
+      }
+    }
+
+    await localDB.saveTask(finalTask)
+    return finalTask
+  },
+
+  async deleteTask(taskId: string): Promise<boolean> {
+    if (googleClientSide.isConnected()) {
+      try {
+        await googleClientSide.deleteGoogleTask(taskId)
+      } catch (err) {
+        console.warn('[Google Tasks] Errore eliminazione remota:', err)
+      }
+    }
+
+    await localDB.deleteTask(taskId)
+    return true
   },
 
   async saveTasks(tasks: AppTaskItem[]): Promise<boolean> {

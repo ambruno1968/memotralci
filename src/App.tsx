@@ -228,23 +228,23 @@ export function App() {
   }
 
   async function handleSaveTask(task: AppTaskItem) {
-    let updatedTasks: AppTaskItem[] = []
+    const saved = await api.saveTask(task)
     setTasks((prev) => {
-      const exists = prev.some((t) => t.id === task.id)
+      const exists = prev.some(
+        (t) => t.id === task.id || (saved.googleTaskId && t.googleTaskId === saved.googleTaskId)
+      )
       if (exists) {
-        updatedTasks = prev.map((t) => (t.id === task.id ? task : t))
-      } else {
-        updatedTasks = [task, ...prev]
+        return prev.map((t) =>
+          t.id === task.id || (saved.googleTaskId && t.googleTaskId === saved.googleTaskId) ? saved : t
+        )
       }
-      return updatedTasks
+      return [saved, ...prev]
     })
 
-    await api.saveTasks(updatedTasks)
-
-    if (task.attachments && task.attachments.length > 0) {
+    if (saved.attachments && saved.attachments.length > 0) {
       setAttachments((prev) => {
         const existingIds = new Set(prev.map((a) => a.id))
-        const newOnes = task.attachments!
+        const newOnes = saved.attachments!
           .filter((a) => !existingIds.has(a.id))
           .map((a) => ({
             id: a.id,
@@ -262,21 +262,16 @@ export function App() {
   }
 
   async function handleToggleTask(taskId: string) {
-    let updatedTasks: AppTaskItem[] = []
-    setTasks((prev) => {
-      updatedTasks = prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
-      return updatedTasks
-    })
-    await api.saveTasks(updatedTasks)
+    const target = tasks.find((t) => t.id === taskId)
+    if (!target) return
+    const toggled = { ...target, completed: !target.completed }
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? toggled : t)))
+    await api.saveTask(toggled)
   }
 
   async function handleDeleteTask(taskId: string) {
-    let updatedTasks: AppTaskItem[] = []
-    setTasks((prev) => {
-      updatedTasks = prev.filter((t) => t.id !== taskId)
-      return updatedTasks
-    })
-    await api.saveTasks(updatedTasks)
+    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    await api.deleteTask(taskId)
   }
 
   async function handleQuickAddTask(title: string) {
@@ -289,9 +284,8 @@ export function App() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    const updated = [newTask, ...tasks]
-    setTasks(updated)
-    await api.saveTasks(updated)
+    const saved = await api.createTask(newTask)
+    setTasks((prev) => [saved, ...prev.filter((t) => t.id !== saved.id)])
   }
 
   // Create Calendar Event from Task
