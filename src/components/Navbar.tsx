@@ -1,4 +1,5 @@
 import React from 'react'
+import appLogo from '../assets/logo-icon.png'
 import {
   CalendarDays,
   CheckSquare,
@@ -58,10 +59,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => onSelectView('calendar')}
           >
-            <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-105 transition ring-1 ring-teal-500/30 flex items-center justify-center bg-white dark:bg-slate-800">
+            <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-105 transition ring-1 ring-teal-500/30 flex items-center justify-center bg-white dark:bg-slate-800 shrink-0">
               <img
-                src="/icon-192.png"
-                alt="Logo MemoTralci"
+                src={appLogo}
+                alt="MemoTralci"
                 className="w-full h-full object-cover"
               />
             </div>
@@ -69,9 +70,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center space-x-1.5">
                 <span className="text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent">
                   MemoTralci
-                </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60">
-                  Novara
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block font-medium">

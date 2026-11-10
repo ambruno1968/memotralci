@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import appLogo from '../assets/logo-icon.png'
 import {
   X,
   ShieldCheck,
@@ -148,7 +149,7 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl overflow-hidden shadow-md ring-1 ring-teal-500/20 flex-shrink-0 bg-white">
-              <img src="/icon-192.png" alt="MemoTralci" className="w-full h-full object-cover" />
+              <img src={appLogo} alt="MemoTralci" className="w-full h-full object-cover" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">

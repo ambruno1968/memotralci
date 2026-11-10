@@ -31,7 +31,7 @@ export default defineConfig({
         scope: './',
         name: 'MemoTralci - Agenda, Note & Allegati',
         short_name: 'MemoTralci',
-        description: 'Gestione agenda, calendario, cose da fare e allegati collegati all\'account Google - Come Tralci Novara',
+        description: 'Gestione agenda, calendario, cose da fare e allegati collegati all\'account Google - Come Tralci',
         theme_color: '#0f5b66',
         background_color: '#042f2e',
         display: 'standalone',

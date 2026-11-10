@@ -2,9 +2,9 @@ import fs from 'fs'
 import sharp from 'sharp'
 
 async function buildBrandAssets() {
-  console.log('Building brand assets and icons...')
+  console.log('Building brand assets and icons (without NOVARA)...')
 
-  // Step 1: Make sure transparent Come Tralci logo is available
+  // Step 1: Make transparent Come Tralci logo, removing the bottom word "NOVARA"
   const rawLogo = await sharp('src/logo.png').trim().raw().toBuffer({ resolveWithObject: true })
   const transparentBuffer = Buffer.alloc(rawLogo.data.length)
   for (let i = 0; i < rawLogo.data.length; i += 4) {
@@ -26,9 +26,13 @@ async function buildBrandAssets() {
     }
   }
 
+  // Row 0 to 188 contains only "COME TRALCI" and the cross/figures emblem.
+  // Rows >= 193 contained "NOVARA" which is now excluded!
   const logoTransPng = await sharp(transparentBuffer, {
     raw: { width: rawLogo.info.width, height: rawLogo.info.height, channels: 4 },
   })
+    .extract({ left: 0, top: 0, width: rawLogo.info.width, height: 188 })
+    .trim()
     .sharpen({ sigma: 1.2, m1: 1.5, m2: 0.5 })
     .png({ quality: 100, compressionLevel: 9 })
     .toBuffer()
@@ -37,14 +41,6 @@ async function buildBrandAssets() {
   const logoBase64 = `data:image/png;base64,${logoTransPng.toString('base64')}`
 
   // Step 2: Create App Icon SVG (512x512)
-  // Blends:
-  // - Premium Teal & Emerald Squircle
-  // - 3D Realistic Desk/Tear-off Calendar Card
-  // - Metallic binder spirals
-  // - Top Calendar Month bar "MEMO TRALCI"
-  // - Calendar week headers & date grid
-  // - The original "COME TRALCI NOVARA" artwork seamlessly blended inside the calendar sheet
-  // - Dynamic active event indicator with date badge
   const iconSvg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
     <defs>
@@ -75,17 +71,12 @@ async function buildBrandAssets() {
       <filter id="cal-shadow" x="-20%" y="-15%" width="140%" height="140%" filterUnits="userSpaceOnUse">
         <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#021c1e" flood-opacity="0.45"/>
       </filter>
-
-      <!-- Subtle Accent Glow -->
-      <filter id="accent-glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#14b8a6" flood-opacity="0.3"/>
-      </filter>
     </defs>
 
-    <!-- App Squircle Base (iOS/Android maskable standard) -->
+    <!-- App Squircle Base -->
     <rect width="512" height="512" rx="116" fill="url(#bg-grad)"/>
 
-    <!-- Subtle Background Calendar Schedule Grid lines -->
+    <!-- Subtle Background Calendar Grid lines -->
     <g opacity="0.08" stroke="#ffffff" stroke-width="2" stroke-linecap="round">
       <line x1="72" y1="128" x2="440" y2="128"/>
       <line x1="72" y1="256" x2="440" y2="256"/>
@@ -95,7 +86,7 @@ async function buildBrandAssets() {
       <line x1="380" y1="64" x2="380" y2="448"/>
     </g>
 
-    <!-- Stacked back sheet for 3D realism -->
+    <!-- Stacked back sheet -->
     <rect x="74" y="86" width="364" height="358" rx="36" fill="#ffffff" opacity="0.55" transform="rotate(-2.2 256 265)" filter="url(#cal-shadow)"/>
 
     <!-- Main Front Calendar Page -->
@@ -110,13 +101,10 @@ async function buildBrandAssets() {
       <text x="256" y="133" font-family="-apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', Roboto, sans-serif" font-size="22" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="4">MEMO TRALCI</text>
 
       <!-- Calendar Spiral Rings -->
-      <!-- Spiral 1 -->
       <rect x="134" y="62" width="22" height="46" rx="11" fill="url(#spiral-grad)"/>
       <ellipse cx="145" cy="102" rx="7" ry="3.5" fill="#042f2e" opacity="0.4"/>
-      <!-- Spiral 2 -->
       <rect x="245" y="62" width="22" height="46" rx="11" fill="url(#spiral-grad)"/>
       <ellipse cx="256" cy="102" rx="7" ry="3.5" fill="#042f2e" opacity="0.4"/>
-      <!-- Spiral 3 -->
       <rect x="356" y="62" width="22" height="46" rx="11" fill="url(#spiral-grad)"/>
       <ellipse cx="367" cy="102" rx="7" ry="3.5" fill="#042f2e" opacity="0.4"/>
 
@@ -132,20 +120,15 @@ async function buildBrandAssets() {
       </g>
       <line x1="88" y1="196" x2="424" y2="196" stroke="#f1f5f9" stroke-width="2"/>
 
-      <!-- The blended COME TRALCI NOVARA Logo -->
-      <image href="${logoBase64}" x="92" y="210" width="328" height="160" preserveAspectRatio="xMidYMid meet"/>
+      <!-- The blended COME TRALCI Logo (without NOVARA) centered nicely -->
+      <image href="${logoBase64}" x="88" y="212" width="336" height="154" preserveAspectRatio="xMidYMid meet"/>
 
       <!-- Bottom Calendar Activity Footer Banner -->
       <g transform="translate(100, 386)">
         <rect x="0" y="0" width="312" height="38" rx="19" fill="#f0fdfa" stroke="#ccfbf1" stroke-width="1.5"/>
-        
-        <!-- Checkmark Badge -->
         <circle cx="22" cy="19" r="9" fill="#0d9488"/>
         <path d="M 18 19 L 21 22 L 26 16" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        
         <text x="38" y="24" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#0f5b66">AGENDA &amp; NOTE</text>
-
-        <!-- Dynamic Date Pill -->
         <rect x="246" y="6" width="56" height="26" rx="13" fill="#0d9488"/>
         <text x="274" y="24" font-family="sans-serif" font-size="13" font-weight="900" fill="#ffffff" text-anchor="middle">CAL</text>
       </g>
@@ -153,31 +136,34 @@ async function buildBrandAssets() {
   </svg>
   `
 
-  // Step 3: Write SVG favicon and icons
   fs.writeFileSync('public/favicon.svg', iconSvg)
   console.log('Saved public/favicon.svg')
 
-  // Generate PNG icons from SVG
   await sharp(Buffer.from(iconSvg))
     .resize(512, 512)
     .png({ quality: 100 })
     .toFile('public/icon-512.png')
-  console.log('Saved public/icon-512.png')
 
   await sharp(Buffer.from(iconSvg))
     .resize(192, 192)
     .png({ quality: 100 })
     .toFile('public/icon-192.png')
-  console.log('Saved public/icon-192.png')
 
   await sharp(Buffer.from(iconSvg))
     .resize(180, 180)
     .png({ quality: 100 })
     .toFile('public/apple-touch-icon.png')
-  console.log('Saved public/apple-touch-icon.png')
 
-  // Step 4: Create a Dedicated Brand Header Logo (Horizontal with Calendar Emblem)
-  // For use in the Navbar, Splash, and Modals
+  // Save in src/assets/ so React components can import it directly and Vite resolves relative path!
+  if (!fs.existsSync('src/assets')) {
+    fs.mkdirSync('src/assets', { recursive: true })
+  }
+  await sharp(Buffer.from(iconSvg))
+    .resize(192, 192)
+    .png({ quality: 100 })
+    .toFile('src/assets/logo-icon.png')
+
+  // Brand Logo horizontal (without NOVARA)
   const brandSvg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="600" height="140" viewBox="0 0 600 140">
     <defs>
@@ -190,28 +176,21 @@ async function buildBrandAssets() {
       </filter>
     </defs>
 
-    <!-- Mini Calendar Emblem on the Left (120x120) -->
     <g transform="translate(10, 10)" filter="url(#logo-drop)">
       <rect width="120" height="120" rx="28" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <!-- Header bar -->
       <path d="M 0 28 C 0 12.5 12.5 0 28 0 L 92 0 C 107.5 0 120 12.5 120 28 L 120 38 L 0 38 Z" fill="url(#brand-cal-grad)"/>
-      <!-- Rings -->
       <rect x="28" y="-4" width="8" height="16" rx="4" fill="#cbd5e1"/>
       <rect x="56" y="-4" width="8" height="16" rx="4" fill="#cbd5e1"/>
       <rect x="84" y="-4" width="8" height="16" rx="4" fill="#cbd5e1"/>
-      <!-- Calendar Icon Symbol inside mini card -->
       <image href="${logoBase64}" x="10" y="44" width="100" height="66" preserveAspectRatio="xMidYMid meet"/>
     </g>
 
-    <!-- App Brand Text on Right -->
     <g transform="translate(148, 48)">
       <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', Roboto, sans-serif" font-size="34" font-weight="900" fill="#0f5b66" letter-spacing="-0.5">MEMO<tspan fill="#0d9488">TRALCI</tspan></text>
-      <text x="2" y="24" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748b" letter-spacing="2">AGENDA • CALENDARIO • ALLEGATI</text>
-      
-      <!-- Live Sync Tag -->
-      <rect x="2" y="38" width="168" height="22" rx="11" fill="#f0fdfa" stroke="#ccfbf1" stroke-width="1"/>
+      <text x="2" y="24" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#64748b" letter-spacing="2">AGENDA • CALENDARIO • NOTE</text>
+      <rect x="2" y="38" width="120" height="22" rx="11" fill="#f0fdfa" stroke="#ccfbf1" stroke-width="1"/>
       <circle cx="12" cy="49" r="4" fill="#10b981"/>
-      <text x="22" y="53" font-family="sans-serif" font-size="10" font-weight="700" fill="#0f766e">COME TRALCI • NOVARA</text>
+      <text x="22" y="53" font-family="sans-serif" font-size="10" font-weight="700" fill="#0f766e">COME TRALCI</text>
     </g>
   </svg>
   `
@@ -220,20 +199,8 @@ async function buildBrandAssets() {
   await sharp(Buffer.from(brandSvg))
     .png({ quality: 100 })
     .toFile('public/brand-logo.png')
-  console.log('Saved public/brand-logo.png and public/brand-logo.svg')
 
-  // Copy to dist if dist exists
-  if (fs.existsSync('dist')) {
-    fs.copyFileSync('public/favicon.svg', 'dist/favicon.svg')
-    fs.copyFileSync('public/icon-512.png', 'dist/icon-512.png')
-    fs.copyFileSync('public/icon-192.png', 'dist/icon-192.png')
-    fs.copyFileSync('public/apple-touch-icon.png', 'dist/apple-touch-icon.png')
-    fs.copyFileSync('public/brand-logo.svg', 'dist/brand-logo.svg')
-    fs.copyFileSync('public/brand-logo.png', 'dist/brand-logo.png')
-    console.log('Copied updated icons to dist/')
-  }
-
-  console.log('Brand assets generation finished successfully!')
+  console.log('Brand assets without NOVARA generated successfully!')
 }
 
 buildBrandAssets().catch((err) => {
