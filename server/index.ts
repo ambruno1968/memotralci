@@ -64,7 +64,7 @@ app.post('/api/config', async (req, res) => {
         // Validate JSON
         JSON.parse(serviceAccountJson)
         fs.writeFileSync(config.serviceAccountPath, serviceAccountJson, 'utf8')
-      } catch (jsonErr) {
+      } catch {
         return res.status(400).json({ error: 'Formato JSON del Service Account non valido' })
       }
     }

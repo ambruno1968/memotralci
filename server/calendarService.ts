@@ -64,8 +64,8 @@ export async function listCalendarEvents(
       const items = response.data.items || []
       return items.map((item) => {
         const isAllDay = Boolean(item.start?.date)
-        const start = isAllDay ? item.start?.date! : item.start?.dateTime!
-        const end = isAllDay ? item.end?.date! : item.end?.dateTime!
+        const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
+        const end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
 
         let category: any = 'altro'
         let attachments: any[] = []
