@@ -11,7 +11,7 @@
     "server:start": "tsx server/index.ts",
     "build": "npm run client:build",
     "start": "tsx server/index.ts",
-    "generate-icons": "node scripts/generate-icons.js",
+    "generate-icons": "node scripts/generate-brand-assets.js",
     "lint": "oxlint",
     "preview": "vite preview"
   },

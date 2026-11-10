@@ -6,7 +6,6 @@ import {
   Paperclip,
   X,
   Plus,
-  Moon,
   Sun,
   Download,
   ArrowRight,

@@ -10,42 +10,65 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'robots.txt'],
+      includeAssets: [
+        'favicon.svg',
+        'apple-touch-icon.png',
+        'icon-192.png',
+        'icon-512.png',
+        'brand-logo.svg',
+        'brand-logo.png',
+        'robots.txt',
+      ],
       manifest: {
-        name: 'MemoTralci - Agenda & To-Do',
+        // ID univoco per evitare sovrapposizioni con altre PWA nello stesso host o repository
+        id: '/memotralci/?id=memotralci-pwa',
+        start_url: '/?source=pwa&app=memotralci',
+        scope: '/',
+        name: 'MemoTralci - Agenda, Note & Allegati',
         short_name: 'MemoTralci',
-        description: 'Gestione agenda, calendario, cose da fare e allegati collegati all\'account Google',
-        theme_color: '#4f46e5',
-        background_color: '#f8fafc',
+        description: 'Gestione agenda, calendario, cose da fare e allegati collegati all\'account Google - Come Tralci Novara',
+        theme_color: '#0f5b66',
+        background_color: '#042f2e',
         display: 'standalone',
         orientation: 'portrait',
+        categories: ['productivity', 'utilities'],
         icons: [
           {
             src: '/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
+            purpose: 'any',
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
+            purpose: 'any',
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'maskable',
+          },
+          {
+            src: '/favicon.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'any',
           },
         ],
       },
       workbox: {
+        // Prefisso cache univoco per isolare il service worker da altre app sullo stesso dominio/porta
+        cacheId: 'memotralci-pwa-v1',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-cache',
+              cacheName: 'memotralci-google-fonts',
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year

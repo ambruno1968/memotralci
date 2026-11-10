@@ -53,20 +53,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => onSelectView('calendar')}
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 group-hover:scale-105 transition">
-              <CalendarDays className="w-5 h-5" />
+            <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-105 transition ring-1 ring-teal-500/30 flex items-center justify-center bg-white dark:bg-slate-800">
+              <img
+                src="/icon-192.png"
+                alt="Logo MemoTralci"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-base font-black tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-600 dark:from-indigo-400 dark:via-purple-400 dark:to-emerald-400 bg-clip-text text-transparent">
+                <span className="text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent">
                   MemoTralci
                 </span>
-                <span className="text-[10px] uppercase font-black tracking-widest px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                  PWA
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60">
+                  Novara
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block font-medium">
-                Agenda, To-Do & Allegati Google
+                Agenda • Calendario • Note
               </p>
             </div>
           </div>
