@@ -12,12 +12,15 @@ import {
   Check,
   Loader2,
   CalendarPlus,
+  Mic,
+  Music,
 } from 'lucide-react'
 import type { AppTaskItem, TaskPriority, TaskCategory } from '../types/task.ts'
 import { PRIORITY_CONFIG } from '../types/task.ts'
 import type { EventAttachment } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { getFileTypeCategory } from '../utils/file.ts'
+import { AudioRecorder } from './AudioRecorder.tsx'
 
 interface TaskModalProps {
   task?: AppTaskItem | null
@@ -50,6 +53,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [attachments, setAttachments] = useState<EventAttachment[]>(task?.attachments || [])
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [showAudioRecorder, setShowAudioRecorder] = useState(false)
 
   async function handleFileUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -73,6 +77,28 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } catch (err) {
       console.error('Errore upload:', err)
       alert('Si è verificato un errore durante il caricamento del file.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleSaveVoiceMemo(audioFile: File) {
+    setIsUploading(true)
+    try {
+      const uploaded = await api.uploadFile(audioFile)
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: uploaded.id,
+          name: uploaded.name,
+          mimeType: uploaded.mimeType,
+          size: uploaded.size,
+          webViewLink: uploaded.webViewLink,
+          webContentLink: uploaded.webContentLink,
+          isLocal: uploaded.isLocal,
+        },
+      ])
+      setShowAudioRecorder(false)
     } finally {
       setIsUploading(false)
     }
@@ -130,19 +156,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="relative w-full max-w-xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/60 dark:border-slate-800">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-emerald-50/50 via-white to-teal-50/50 dark:from-slate-800/80 dark:to-slate-800/50">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+            <div className="p-3 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/25">
               <CheckSquare className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">
                 {isEditing ? 'Modifica Attività' : 'Nuova Cosa da Fare'}
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 font-medium">
                 Organizza task, checklist e documenti correlati
               </p>
             </div>
@@ -159,7 +185,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Titolo */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               Attività *
             </label>
             <input
@@ -169,14 +195,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="es. Ordinare nuovi tralci per vigneto, Inviare fattura, Preparare report..."
-              className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-base font-medium transition"
+              className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-base font-bold transition"
             />
           </div>
 
-          {/* Priorità e Categoria */}
+          {/* Priorità e Scadenza */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Priorità
               </label>
               <div className="grid grid-cols-4 gap-1.5">
@@ -188,7 +214,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       key={p}
                       type="button"
                       onClick={() => setPriority(p)}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-semibold border transition ${
+                      className={`py-2 px-1 text-center rounded-xl text-xs font-black uppercase tracking-wider border transition ${
                         isSelected
                           ? `${conf.badge} ring-2 ring-emerald-500 shadow-xs border-transparent`
                           : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
@@ -202,7 +228,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Data di scadenza
               </label>
               <div className="relative">
@@ -211,7 +237,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
             </div>
@@ -219,7 +245,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
           {/* Descrizione / Note */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               Dettagli & Note
             </label>
             <textarea
@@ -227,18 +253,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Aggiungi istruzioni, contatti o note utili..."
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 outline-none resize-none font-medium"
             />
           </div>
 
           {/* SOTTO-ATTIVITÀ (Checklist) */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Checklist / Sotto-Attività
               </label>
               {subtasks.length > 0 && (
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-400 font-bold">
                   {subtasks.filter((s) => s.completed).length} di {subtasks.length} completate
                 </span>
               )}
@@ -256,12 +282,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   }
                 }}
                 placeholder="Aggiungi punto di controllo..."
-                className="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
               />
               <button
                 type="button"
                 onClick={handleAddSubtask}
-                className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl text-xs font-semibold transition flex items-center space-x-1"
+                className="px-4 py-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-emerald-200"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Aggiungi</span>
@@ -269,21 +295,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
 
             {subtasks.length > 0 && (
-              <div className="space-y-1.5 p-2 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <div className="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
                 {subtasks.map((st) => (
                   <div
                     key={st.id}
-                    className="flex items-center justify-between p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition"
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-white dark:hover:bg-slate-800 transition"
                   >
                     <label className="flex items-center space-x-2.5 cursor-pointer flex-1 overflow-hidden">
                       <input
                         type="checkbox"
                         checked={st.completed}
                         onChange={() => handleToggleSubtask(st.id)}
-                        className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                        className="rounded-lg text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                       />
                       <span
-                        className={`text-xs truncate ${
+                        className={`text-xs font-semibold truncate ${
                           st.completed
                             ? 'line-through text-slate-400 dark:text-slate-500'
                             : 'text-slate-700 dark:text-slate-200'
@@ -308,16 +334,32 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           {/* ALLEGATI GOOGLE DRIVE */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center space-x-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <label className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 <Paperclip className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Documenti & Allegati</span>
               </label>
-              <span className="text-xs text-slate-400">
-                {attachments.length} {attachments.length === 1 ? 'file' : 'file'}
-              </span>
+
+              <button
+                type="button"
+                onClick={() => setShowAudioRecorder((v) => !v)}
+                className="flex items-center space-x-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>{showAudioRecorder ? 'Chiudi Vocale' : '+ Nota Vocale'}</span>
+              </button>
             </div>
 
-            <label className="relative border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-emerald-500 rounded-2xl p-4 text-center transition cursor-pointer flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-800/30">
+            {/* Audio Recorder */}
+            {showAudioRecorder && (
+              <div className="mb-3">
+                <AudioRecorder
+                  onSaveAudio={handleSaveVoiceMemo}
+                  onCancel={() => setShowAudioRecorder(false)}
+                />
+              </div>
+            )}
+
+            <label className="relative border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-emerald-500 rounded-2xl p-4 text-center transition cursor-pointer flex flex-col items-center justify-center bg-slate-50/60 dark:bg-slate-800/40">
               <input
                 type="file"
                 multiple
@@ -326,13 +368,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 disabled={isUploading}
               />
               {isUploading ? (
-                <div className="flex items-center space-x-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+                <div className="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-200">
                   <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
                   <span>Caricamento allegati in corso...</span>
                 </div>
               ) : (
-                <div className="flex items-center space-x-2 text-xs text-slate-600 dark:text-slate-300">
-                  <Upload className="w-4 h-4 text-emerald-500" />
+                <div className="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+                  <Upload className="w-4 h-4 text-emerald-600" />
                   <span>Carica ricevute, preventivi, foto o PDF su Google Drive</span>
                 </div>
               )}
@@ -345,21 +387,23 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   return (
                     <div
                       key={att.id}
-                      className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs"
+                      className="flex items-center justify-between p-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs"
                     >
                       <button
                         type="button"
                         onClick={() => onPreviewAttachment && onPreviewAttachment(att)}
                         className="flex items-center space-x-2 overflow-hidden text-left flex-1 hover:text-emerald-600"
                       >
-                        <div className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <div className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 shrink-0">
                           {cat === 'image' ? (
                             <ImageIcon className="w-3.5 h-3.5" />
+                          ) : cat === 'audio' ? (
+                            <Music className="w-3.5 h-3.5" />
                           ) : (
                             <FileText className="w-3.5 h-3.5" />
                           )}
                         </div>
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
                           {att.name}
                         </span>
                       </button>
@@ -381,7 +425,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60">
           <div className="flex items-center space-x-2">
             {isEditing && onDelete && (
               <button
@@ -392,7 +436,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     onClose()
                   }
                 }}
-                className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition"
+                className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition cursor-pointer"
                 title="Elimina attività"
               >
                 <Trash2 className="w-4 h-4" />
@@ -408,7 +452,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     onClose()
                   }
                 }}
-                className="flex items-center space-x-1.5 px-3 py-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 rounded-xl transition"
+                className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 rounded-xl transition border border-indigo-200"
                 title="Crea evento corrispondente nel Calendario Google"
               >
                 <CalendarPlus className="w-3.5 h-3.5" />
@@ -421,14 +465,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition"
+              className="px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition"
             >
               Annulla
             </button>
             <button
               onClick={handleSubmit}
               disabled={isSaving || !title.trim()}
-              className="flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-md shadow-emerald-500/20 transition cursor-pointer"
+              className="flex items-center space-x-2 px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 rounded-xl shadow-md shadow-emerald-500/25 transition cursor-pointer"
             >
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

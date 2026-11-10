@@ -11,11 +11,14 @@ import {
   Image as ImageIcon,
   Check,
   Loader2,
+  Mic,
+  Music,
 } from 'lucide-react'
 import type { AppCalendarEvent, EventCategory, EventAttachment } from '../types/event.ts'
 import { CATEGORY_COLORS } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { formatFileSize, getFileTypeCategory } from '../utils/file.ts'
+import { AudioRecorder } from './AudioRecorder.tsx'
 
 interface EventModalProps {
   event?: AppCalendarEvent | null
@@ -58,6 +61,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [showAudioRecorder, setShowAudioRecorder] = useState(false)
 
   async function handleFileUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -81,6 +85,28 @@ export const EventModal: React.FC<EventModalProps> = ({
     } catch (err) {
       console.error('Errore upload:', err)
       alert('Si è verificato un errore durante il caricamento del file.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleSaveVoiceMemo(audioFile: File) {
+    setIsUploading(true)
+    try {
+      const uploaded = await api.uploadFile(audioFile)
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: uploaded.id,
+          name: uploaded.name,
+          mimeType: uploaded.mimeType,
+          size: uploaded.size,
+          webViewLink: uploaded.webViewLink,
+          webContentLink: uploaded.webContentLink,
+          isLocal: uploaded.isLocal,
+        },
+      ])
+      setShowAudioRecorder(false)
     } finally {
       setIsUploading(false)
     }
@@ -126,20 +152,20 @@ export const EventModal: React.FC<EventModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="relative w-full max-w-xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/60 dark:border-slate-800">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50/50 via-white to-purple-50/50 dark:from-slate-800/80 dark:to-slate-800/50">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+            <div className="p-3 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">
                 {isEditing ? 'Modifica Evento' : 'Nuovo Evento in Agenda'}
               </h2>
-              <p className="text-xs text-slate-500">
-                Sincronizzato con l'account Google e Google Drive
+              <p className="text-xs text-slate-500 font-medium">
+                Sincronizzato con Google Calendar & Google Drive
               </p>
             </div>
           </div>
@@ -155,7 +181,7 @@ export const EventModal: React.FC<EventModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Titolo */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               Titolo dell'evento *
             </label>
             <input
@@ -164,14 +190,14 @@ export const EventModal: React.FC<EventModalProps> = ({
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="es. Riunione bilancio, Taglio tralci, Visita fornitore..."
-              className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition text-base font-medium"
+              placeholder="es. Riunione bilancio, Visita vigneto, Taglio tralci..."
+              className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base font-bold transition"
             />
           </div>
 
           {/* Categorie */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
               Categoria
             </label>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -183,9 +209,9 @@ export const EventModal: React.FC<EventModalProps> = ({
                     key={cat}
                     type="button"
                     onClick={() => setCategory(cat)}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold border transition ${
+                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl text-xs font-bold border transition ${
                       isSelected
-                        ? `${conf.bg} ${conf.text} ${conf.border} ring-2 ring-indigo-500 shadow-sm`
+                        ? `${conf.bg} ${conf.text} ${conf.border} ring-2 ring-indigo-500 shadow-xs font-black`
                         : 'bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                     }`}
                   >
@@ -197,11 +223,11 @@ export const EventModal: React.FC<EventModalProps> = ({
             </div>
           </div>
 
-          {/* Tutto il giorno checkbox */}
-          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60">
+          {/* Tutto il giorno toggle */}
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
             <div className="flex items-center space-x-2.5">
-              <Clock className="w-4 h-4 text-slate-500" />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              <Clock className="w-4 h-4 text-indigo-500" />
+              <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
                 Tutto il giorno
               </span>
             </div>
@@ -228,7 +254,7 @@ export const EventModal: React.FC<EventModalProps> = ({
           {/* Date & Orari */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Inizio
               </label>
               <input
@@ -236,11 +262,11 @@ export const EventModal: React.FC<EventModalProps> = ({
                 required
                 value={start}
                 onChange={(e) => setStart(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Fine
               </label>
               <input
@@ -248,14 +274,14 @@ export const EventModal: React.FC<EventModalProps> = ({
                 required
                 value={end}
                 onChange={(e) => setEnd(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
           </div>
 
           {/* Luogo */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               Luogo / Link Riunione
             </label>
             <div className="relative">
@@ -265,36 +291,52 @@ export const EventModal: React.FC<EventModalProps> = ({
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="es. Vigneto Nord, Ufficio centrale, Google Meet..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
           </div>
 
           {/* Descrizione / Note */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               Note & Dettagli
             </label>
             <textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Inserisci dettagli, istruzioni o appunti..."
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              placeholder="Inserisci dettagli, istruzioni o appunti per l'evento..."
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none resize-none font-medium"
             />
           </div>
 
           {/* ALLEGATI GOOGLE DRIVE / FILE */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center space-x-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <label className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 <Paperclip className="w-3.5 h-3.5 text-indigo-500" />
                 <span>Allegati (Google Drive)</span>
               </label>
-              <span className="text-xs text-slate-400">
-                {attachments.length} {attachments.length === 1 ? 'file' : 'file'}
-              </span>
+
+              <button
+                type="button"
+                onClick={() => setShowAudioRecorder((v) => !v)}
+                className="flex items-center space-x-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>{showAudioRecorder ? 'Chiudi Vocale' : '+ Nota Vocale'}</span>
+              </button>
             </div>
+
+            {/* Audio Recorder Component */}
+            {showAudioRecorder && (
+              <div className="mb-3">
+                <AudioRecorder
+                  onSaveAudio={handleSaveVoiceMemo}
+                  onCancel={() => setShowAudioRecorder(false)}
+                />
+              </div>
+            )}
 
             {/* Drag & Drop Upload Zone */}
             <div
@@ -310,8 +352,8 @@ export const EventModal: React.FC<EventModalProps> = ({
               }}
               className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition cursor-pointer ${
                 dragActive
-                  ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30'
-                  : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50'
+                  ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40'
+                  : 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-50'
               }`}
             >
               <input
@@ -325,19 +367,19 @@ export const EventModal: React.FC<EventModalProps> = ({
                 {isUploading ? (
                   <>
                     <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
                       Caricamento su Google Drive in corso...
                     </p>
                   </>
                 ) : (
                   <>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 shadow-xs text-indigo-500">
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 shadow-sm text-indigo-600">
                       <Upload className="w-4 h-4" />
                     </div>
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                      Trascina qui i tuoi allegati o <span className="text-indigo-600 dark:text-indigo-400 font-semibold underline">sfoglia</span>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Trascina qui i tuoi allegati o <span className="text-indigo-600 dark:text-indigo-400 underline">sfoglia</span>
                     </p>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-slate-400 font-medium">
                       Foto, PDF, ricevute, documenti (fino a 50MB)
                     </p>
                   </>
@@ -353,25 +395,27 @@ export const EventModal: React.FC<EventModalProps> = ({
                   return (
                     <div
                       key={att.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs group"
+                      className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs group"
                     >
                       <button
                         type="button"
                         onClick={() => onPreviewAttachment && onPreviewAttachment(att)}
                         className="flex items-center space-x-2.5 overflow-hidden text-left flex-1 hover:text-indigo-600 transition"
                       >
-                        <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 shrink-0">
+                        <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 shrink-0">
                           {cat === 'image' ? (
                             <ImageIcon className="w-4 h-4" />
+                          ) : cat === 'audio' ? (
+                            <Music className="w-4 h-4" />
                           ) : (
                             <FileText className="w-4 h-4" />
                           )}
                         </div>
                         <div className="truncate">
-                          <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate group-hover:text-indigo-600">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-indigo-600">
                             {att.name}
                           </p>
-                          <p className="text-[10px] text-slate-400">
+                          <p className="text-[10px] text-slate-400 font-medium">
                             {formatFileSize(att.size)}
                           </p>
                         </div>
@@ -380,7 +424,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveAttachment(att.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition ml-2"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition ml-2"
                         title="Rimuovi allegato"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -394,7 +438,7 @@ export const EventModal: React.FC<EventModalProps> = ({
         </form>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60">
           {isEditing && onDelete ? (
             <button
               type="button"
@@ -404,7 +448,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                   onClose()
                 }
               }}
-              className="flex items-center space-x-1.5 px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition"
+              className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span>Elimina</span>
@@ -417,14 +461,14 @@ export const EventModal: React.FC<EventModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition"
+              className="px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition"
             >
               Annulla
             </button>
             <button
               onClick={handleSubmit}
               disabled={isSaving || !title.trim()}
-              className="flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl shadow-md shadow-indigo-500/20 transition cursor-pointer"
+              className="flex items-center space-x-2 px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:opacity-50 rounded-xl shadow-md shadow-indigo-500/25 transition cursor-pointer"
             >
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
