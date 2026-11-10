@@ -24,13 +24,21 @@ export interface CredentialInspection {
   raw?: any
 }
 
-export function inspectCredentials(): CredentialInspection {
+export function inspectCredentials(targetConfig?: any): CredentialInspection {
   try {
     let raw: any = null
-    if (config.serviceAccountJson) {
-      raw = JSON.parse(config.serviceAccountJson)
-    } else if (fs.existsSync(config.serviceAccountPath)) {
-      raw = JSON.parse(fs.readFileSync(config.serviceAccountPath, 'utf8'))
+    const saJson =
+      targetConfig?.serviceAccountJson ||
+      process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+    const saPath =
+      targetConfig?.serviceAccountPath ||
+      process.env.GOOGLE_SERVICE_ACCOUNT_PATH ||
+      path.resolve(process.cwd(), 'service-account.json')
+
+    if (saJson) {
+      raw = JSON.parse(saJson)
+    } else if (fs.existsSync(saPath)) {
+      raw = JSON.parse(fs.readFileSync(saPath, 'utf8'))
     }
 
     if (!raw) return { type: 'none' }

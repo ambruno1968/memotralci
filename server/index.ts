@@ -241,6 +241,17 @@ app.post('/api/tasks', async (req, res) => {
   }
 })
 
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    const current = await listTasks()
+    const filtered = current.filter((t) => t.id !== req.params.id)
+    await saveTasks(filtered)
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // File Upload & Attachments Endpoints
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {

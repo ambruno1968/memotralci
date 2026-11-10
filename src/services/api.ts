@@ -274,42 +274,38 @@ export const api = {
     return true
   },
 
-  // Tasks - Direct Google Tasks Sync (Sincronizzato con Google Calendar Tasks)
+  // Tasks - Archiviazione Cose da Fare nella cartella Drive (sottocartella "Archivio_Task")
   async getTasks(): Promise<AppTaskItem[]> {
     const localTasks = await localDB.getAllTasks()
 
-    // 1. Direct Client-Side Google Tasks Sync
+    // 1. Direct Client-Side Google Drive Task Archive
     if (googleClientSide.isConnected()) {
       try {
-        const googleTasks = await googleClientSide.getGoogleTasks()
-        const googleTaskMap = new Map(googleTasks.map((t) => [t.id, t]))
+        const driveTasks = await googleClientSide.getDriveTasks()
+        if (driveTasks && driveTasks.length > 0) {
+          const driveMap = new Map(driveTasks.map((t) => [t.id, t]))
+          const merged: AppTaskItem[] = [...driveTasks]
 
-        const merged: AppTaskItem[] = [...googleTasks]
-        const mergedIds = new Set(googleTasks.map((t) => t.id))
-
-        // Cerca task locali non ancora presenti su Google Tasks
-        for (const lt of localTasks) {
-          const matched = lt.googleTaskId ? googleTaskMap.get(lt.googleTaskId) : null
-          if (!matched && !mergedIds.has(lt.id)) {
-            // Task creato in locale: caricalo su Google Tasks se siamo online
-            try {
-              const uploaded = await googleClientSide.createGoogleTask(lt)
-              merged.push(uploaded)
-              mergedIds.add(uploaded.id)
-            } catch {
+          // Unisci task locali non ancora presenti su Drive
+          for (const lt of localTasks) {
+            if (!driveMap.has(lt.id)) {
               merged.push(lt)
             }
           }
-        }
 
-        await localDB.saveTasks(merged)
-        return merged
+          await localDB.saveTasks(merged)
+          return merged
+        } else if (localTasks.length > 0) {
+          // Se su Drive non c'è ancora nulla, carica i task locali nell'archivio Drive
+          await googleClientSide.saveDriveTasks(localTasks)
+          return localTasks
+        }
       } catch (err) {
-        console.warn('[Google Tasks] Errore sincronizzazione diretta con Google Tasks:', err)
+        console.warn('[Archivio Drive] Errore lettura task da Drive, uso database locale:', err)
       }
     }
 
-    // 2. Server API fallback
+    // 2. Server API fallback (Express server legge dalla sottocartella Drive o locale)
     try {
       const res = await fetch('/api/tasks', { signal: AbortSignal.timeout(3000) })
       if (res.ok) {
@@ -320,58 +316,100 @@ export const api = {
     } catch {
       // Fallback
     }
+
     return localTasks
   },
 
   async createTask(taskData: AppTaskItem): Promise<AppTaskItem> {
-    let finalTask = { ...taskData }
-
-    if (googleClientSide.isConnected()) {
-      try {
-        finalTask = await googleClientSide.createGoogleTask(finalTask)
-      } catch (err) {
-        console.warn('[Google Tasks] Errore creazione remota:', err)
-      }
+    const finalTask = {
+      ...taskData,
+      id: taskData.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      createdAt: taskData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
 
     await localDB.saveTask(finalTask)
+    const allTasks = await localDB.getAllTasks()
+
+    if (googleClientSide.isConnected()) {
+      try {
+        await googleClientSide.saveDriveTask(finalTask, allTasks)
+      } catch (err) {
+        console.warn('[Archivio Drive] Errore salvataggio remoto:', err)
+      }
+    }
+
+    try {
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalTask),
+        signal: AbortSignal.timeout(3000),
+      })
+    } catch {}
+
     return finalTask
   },
 
   async saveTask(task: AppTaskItem): Promise<AppTaskItem> {
-    let finalTask = { ...task, updatedAt: new Date().toISOString() }
+    const finalTask = { ...task, updatedAt: new Date().toISOString() }
+
+    await localDB.saveTask(finalTask)
+    const allTasks = await localDB.getAllTasks()
 
     if (googleClientSide.isConnected()) {
       try {
-        if (finalTask.googleTaskId || !finalTask.id.startsWith('task_')) {
-          finalTask = await googleClientSide.updateGoogleTask(finalTask)
-        } else {
-          finalTask = await googleClientSide.createGoogleTask(finalTask)
-        }
+        await googleClientSide.saveDriveTask(finalTask, allTasks)
       } catch (err) {
-        console.warn('[Google Tasks] Errore salvataggio remoto:', err)
+        console.warn('[Archivio Drive] Errore salvataggio remoto:', err)
       }
     }
 
-    await localDB.saveTask(finalTask)
+    try {
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalTask),
+        signal: AbortSignal.timeout(3000),
+      })
+    } catch {}
+
     return finalTask
   },
 
   async deleteTask(taskId: string): Promise<boolean> {
+    await localDB.deleteTask(taskId)
+    const remainingTasks = await localDB.getAllTasks()
+
     if (googleClientSide.isConnected()) {
       try {
-        await googleClientSide.deleteGoogleTask(taskId)
+        await googleClientSide.deleteDriveTask(taskId, remainingTasks)
       } catch (err) {
-        console.warn('[Google Tasks] Errore eliminazione remota:', err)
+        console.warn('[Archivio Drive] Errore eliminazione remota:', err)
       }
     }
 
-    await localDB.deleteTask(taskId)
+    try {
+      await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(3000),
+      })
+    } catch {}
+
     return true
   },
 
   async saveTasks(tasks: AppTaskItem[]): Promise<boolean> {
     await localDB.saveTasks(tasks)
+
+    if (googleClientSide.isConnected()) {
+      try {
+        await googleClientSide.saveDriveTasks(tasks)
+      } catch (err) {
+        console.warn('[Archivio Drive] Errore salvataggio massivo su Drive:', err)
+      }
+    }
+
     try {
       const res = await fetch('/api/tasks', {
         method: 'POST',

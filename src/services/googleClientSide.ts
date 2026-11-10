@@ -4,7 +4,7 @@
 
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
-import type { AppTaskItem, SubtaskItem } from '../types/task.ts'
+import type { AppTaskItem } from '../types/task.ts'
 
 export interface GoogleUserInfo {
   id?: string
@@ -24,7 +24,6 @@ export const GOOGLE_DEFAULTS = {
   scopes: [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/tasks',
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
@@ -38,16 +37,19 @@ const STORAGE_KEYS = {
   USER: 'memotralci_google_user',
   CALENDAR_ID: 'memotralci_resolved_cal_id',
   FOLDER_ID: 'memotralci_resolved_folder_id',
+  TASK_FOLDER_ID: 'memotralci_task_folder_id',
 }
 
 class GoogleClientSide {
   private gisPromise: Promise<void> | null = null
   private cachedCalendarId: string | null = null
   private cachedFolderId: string | null = null
+  private cachedTaskFolderId: string | null = null
 
   constructor() {
     this.cachedCalendarId = localStorage.getItem(STORAGE_KEYS.CALENDAR_ID)
     this.cachedFolderId = localStorage.getItem(STORAGE_KEYS.FOLDER_ID)
+    this.cachedTaskFolderId = localStorage.getItem(STORAGE_KEYS.TASK_FOLDER_ID)
   }
 
   // Carica script Google Identity Services
@@ -115,8 +117,10 @@ class GoogleClientSide {
       localStorage.removeItem(STORAGE_KEYS.TOKEN)
       localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES)
       localStorage.removeItem(STORAGE_KEYS.USER)
+      localStorage.removeItem(STORAGE_KEYS.TASK_FOLDER_ID)
       this.cachedCalendarId = null
       this.cachedFolderId = null
+      this.cachedTaskFolderId = null
     } catch {}
   }
 
@@ -555,7 +559,7 @@ class GoogleClientSide {
     if (!token) return []
 
     const folderId = await this.resolveDriveFolderId()
-    const query = `'${folderId}' in parents and trashed = false`
+    const query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'tasks.json' and name != '_tasks_index.json'`
 
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
@@ -582,215 +586,360 @@ class GoogleClientSide {
       isLocal: false,
     }))
   }
+
   // ==========================================
-  // GOOGLE TASKS DIRECT INTEGRATION (Google Calendar Tasks)
+  // GOOGLE DRIVE TASK ARCHIVE INTEGRATION
+  // (Sottocartella "Archivio_Task" dentro "allegati memotralci")
   // ==========================================
 
-  private formatTaskNotes(task: AppTaskItem): string {
-    const lines: string[] = []
-    if (task.description && task.description.trim()) {
-      lines.push(task.description.trim())
-    }
-    const tags: string[] = []
-    if (task.priority) tags.push(`[Priorità: ${task.priority}]`)
-    if (task.category) tags.push(`[Categoria: ${task.category}]`)
-    if (tags.length > 0) {
-      lines.push('')
-      lines.push(tags.join(' '))
-    }
-    if (task.subtasks && task.subtasks.length > 0) {
-      lines.push('')
-      lines.push('Sotto-attività:')
-      for (const st of task.subtasks) {
-        lines.push(`- [${st.completed ? 'x' : ' '}] ${st.title}`)
+  public async resolveTaskArchiveFolderId(): Promise<string> {
+    if (this.cachedTaskFolderId) return this.cachedTaskFolderId
+
+    const parentFolderId = await this.resolveDriveFolderId()
+    const token = this.getToken()
+    if (!token) return parentFolderId
+
+    const folderName = 'Archivio_Task'
+
+    try {
+      const q = `'${parentFolderId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+      const searchRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      if (searchRes.ok) {
+        const data = await searchRes.json()
+        const found = data.files && data.files[0]
+        if (found?.id) {
+          this.cachedTaskFolderId = found.id
+          localStorage.setItem(STORAGE_KEYS.TASK_FOLDER_ID, found.id)
+          return found.id
+        }
       }
+
+      // Se non esiste, crea la sottocartella dentro la cartella allegati
+      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: folderName,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [parentFolderId],
+          description: 'Archivio delle attività MemoTralci organizzate per data e descrizione',
+        }),
+      })
+
+      if (createRes.ok) {
+        const created = await createRes.json()
+        if (created?.id) {
+          this.cachedTaskFolderId = created.id
+          localStorage.setItem(STORAGE_KEYS.TASK_FOLDER_ID, created.id)
+          return created.id
+        }
+      }
+    } catch (e) {
+      console.warn('[Google Drive Task Archive] Risoluzione sottocartella fallita:', e)
     }
-    return lines.join('\n')
+
+    return parentFolderId
   }
 
-  private parseTaskNotes(notes: string | undefined): {
-    description: string
-    priority: 'bassa' | 'media' | 'alta' | 'urgente'
-    category: 'lavoro' | 'personale' | 'spesa' | 'progetto' | 'altro'
-    subtasks: SubtaskItem[]
-  } {
-    if (!notes) {
-      return { description: '', priority: 'media', category: 'lavoro', subtasks: [] }
-    }
-
-    let priority: any = 'media'
-    const prioMatch = notes.match(/\[Priorità:\s*(\w+)\]/i)
-    if (prioMatch && ['bassa', 'media', 'alta', 'urgente'].includes(prioMatch[1].toLowerCase())) {
-      priority = prioMatch[1].toLowerCase()
-    }
-
-    let category: any = 'lavoro'
-    const catMatch = notes.match(/\[Categoria:\s*(\w+)\]/i)
-    if (catMatch && ['lavoro', 'personale', 'spesa', 'progetto', 'altro'].includes(catMatch[1].toLowerCase())) {
-      category = catMatch[1].toLowerCase()
-    }
-
-    const subtasks: SubtaskItem[] = []
-    const rawLines = notes.split('\n')
-    const descLines: string[] = []
-
-    for (const line of rawLines) {
-      const stMatch = line.match(/^-\s*\[([ xX])\]\s*(.+)$/)
-      if (stMatch) {
-        subtasks.push({
-          id: `st_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-          title: stMatch[2].trim(),
-          completed: stMatch[1].toLowerCase() === 'x',
-        })
-      } else if (!line.includes('[Priorità:') && !line.includes('[Categoria:') && !line.trim().startsWith('Sotto-attività:')) {
-        descLines.push(line)
-      }
-    }
-
-    return {
-      description: descLines.join('\n').trim(),
-      priority,
-      category,
-      subtasks,
-    }
+  public getTaskFileName(task: AppTaskItem): string {
+    const date =
+      task.dueDate ||
+      (task.createdAt ? task.createdAt.split('T')[0] : new Date().toISOString().split('T')[0])
+    const cleanTitle = (task.title || 'Attivita')
+      .replace(/[\\/:*?"<>|\r\n\t]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const cleanDesc = task.description
+      ? task.description.replace(/[\\/:*?"<>|\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+      : ''
+    const base = cleanDesc ? `${cleanTitle} - ${cleanDesc}` : cleanTitle
+    const shortBase = base.slice(0, 70).trim()
+    return `[${date}] ${shortBase}_${task.id}.json`
   }
 
-  public async getGoogleTasks(): Promise<AppTaskItem[]> {
+  private async uploadOrUpdateJsonFile(
+    folderId: string,
+    fileName: string,
+    data: any,
+    description?: string,
+    matchSuffix?: string
+  ): Promise<string> {
+    const token = this.getToken()
+    if (!token) return ''
+
+    const contentStr = JSON.stringify(data, null, 2)
+    const jsonBlob = new Blob([contentStr], { type: 'application/json' })
+
+    // Verifica se il file esiste già nella cartella
+    let existingFileId: string | null = null
+    try {
+      const q = matchSuffix
+        ? `'${folderId}' in parents and trashed = false`
+        : `'${folderId}' in parents and name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
+      const searchRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (searchRes.ok) {
+        const searchData = await searchRes.json()
+        const files: any[] = searchData.files || []
+        const match = matchSuffix
+          ? files.find((f) => f.name?.endsWith(matchSuffix))
+          : files.find((f) => f.name === fileName)
+        if (match?.id) existingFileId = match.id
+      }
+    } catch {}
+
+    const boundary = '-------MEMOTRALCI' + Math.random().toString(36).substring(2)
+    const delimiter = `\r\n--${boundary}\r\n`
+    const closeDelim = `\r\n--${boundary}--`
+
+    if (existingFileId) {
+      const metadata = { name: fileName, description }
+      const metadataPart = new Blob(
+        [
+          delimiter,
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+          JSON.stringify(metadata),
+          delimiter,
+          'Content-Type: application/json\r\n\r\n',
+        ],
+        { type: 'text/plain' }
+      )
+      const endPart = new Blob([closeDelim], { type: 'text/plain' })
+      const multipartBody = new Blob([metadataPart, jsonBlob, endPart])
+
+      const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&fields=id,name`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
+          },
+          body: multipartBody,
+        }
+      )
+      if (res.ok) {
+        const d = await res.json()
+        return d.id
+      }
+    } else {
+      const metadata = {
+        name: fileName,
+        parents: [folderId],
+        description,
+        mimeType: 'application/json',
+      }
+      const metadataPart = new Blob(
+        [
+          delimiter,
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+          JSON.stringify(metadata),
+          delimiter,
+          'Content-Type: application/json\r\n\r\n',
+        ],
+        { type: 'text/plain' }
+      )
+      const endPart = new Blob([closeDelim], { type: 'text/plain' })
+      const multipartBody = new Blob([metadataPart, jsonBlob, endPart])
+
+      const res = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
+          },
+          body: multipartBody,
+        }
+      )
+      if (res.ok) {
+        const d = await res.json()
+        return d.id
+      }
+    }
+    return ''
+  }
+
+  public async getDriveTasks(): Promise<AppTaskItem[]> {
     const token = this.getToken()
     if (!token) return []
 
     try {
-      const res = await fetch(
-        'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?showCompleted=true&showHidden=true&maxResults=100',
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+      const folderId = await this.resolveTaskArchiveFolderId()
+
+      // 1. Prova prima a leggere l'indice _tasks_index.json
+      const indexQuery = `'${folderId}' in parents and name = '_tasks_index.json' and trashed = false`
+      const indexRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(indexQuery)}&fields=files(id,name)&pageSize=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
       )
 
-      if (!res.ok) {
-        if (res.status === 401) this.clearToken()
-        return []
+      if (indexRes.ok) {
+        const indexData = await indexRes.json()
+        const indexFile = indexData.files?.[0]
+        if (indexFile?.id) {
+          const contentRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${indexFile.id}?alt=media`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          )
+          if (contentRes.ok) {
+            const tasks = await contentRes.json()
+            if (Array.isArray(tasks)) {
+              return tasks
+            }
+          }
+        }
       }
 
-      const data = await res.json()
-      const items: any[] = data.items || []
+      // 2. Se l'indice non c'è, leggi i singoli file task presenti nella sottocartella
+      const filesQuery = `'${folderId}' in parents and trashed = false and mimeType = 'application/json' and name != '_tasks_index.json'`
+      const filesRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(filesQuery)}&fields=files(id,name)&pageSize=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
 
-      return items.map((t) => {
-        const parsed = this.parseTaskNotes(t.notes)
-        const isCompleted = t.status === 'completed'
-        const dueDate = t.due ? t.due.split('T')[0] : undefined
+      if (filesRes.ok) {
+        const filesData = await filesRes.json()
+        const files: any[] = filesData.files || []
+        const loadedTasks: AppTaskItem[] = []
 
-        return {
-          id: t.id,
-          googleTaskId: t.id,
-          title: t.title || '(Senza titolo)',
-          description: parsed.description,
-          completed: isCompleted,
-          dueDate,
-          priority: parsed.priority,
-          category: parsed.category,
-          subtasks: parsed.subtasks,
-          createdAt: t.updated || new Date().toISOString(),
-          updatedAt: t.updated || new Date().toISOString(),
+        for (const f of files) {
+          try {
+            const taskRes = await fetch(
+              `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+            if (taskRes.ok) {
+              const t = await taskRes.json()
+              if (t && t.id && t.title) {
+                loadedTasks.push(t)
+              }
+            }
+          } catch {}
         }
-      })
+
+        if (loadedTasks.length > 0) {
+          loadedTasks.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+          return loadedTasks
+        }
+      }
     } catch (e) {
-      console.warn('[Google Tasks] Errore lettura attività:', e)
-      return []
+      console.warn('[Google Drive Task Archive] Errore lettura task da Drive:', e)
     }
+
+    return []
   }
 
-  public async createGoogleTask(task: AppTaskItem): Promise<AppTaskItem> {
+  public async saveDriveTasks(tasks: AppTaskItem[]): Promise<void> {
     const token = this.getToken()
-    if (!token) throw new Error('Account Google non connesso')
+    if (!token) return
 
-    const notes = this.formatTaskNotes(task)
-    const body: any = {
-      title: task.title,
-      notes,
-      status: task.completed ? 'completed' : 'needsAction',
-    }
+    try {
+      const folderId = await this.resolveTaskArchiveFolderId()
 
-    if (task.dueDate) {
-      body.due = `${task.dueDate}T00:00:00.000Z`
-    }
+      // 1. Salva l'indice generale _tasks_index.json
+      await this.uploadOrUpdateJsonFile(folderId, '_tasks_index.json', tasks, 'Indice generale delle cose da fare MemoTralci')
 
-    const res = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+      // 2. Salva/aggiorna ogni singolo task come file archiviato [DATA] Descrizione_id.json
+      for (const task of tasks) {
+        const fileName = this.getTaskFileName(task)
+        await this.uploadOrUpdateJsonFile(
+          folderId,
+          fileName,
+          task,
+          `Attività: ${task.title} - Scadenza: ${task.dueDate || 'Nessuna'}`,
+          `_${task.id}.json`
+        )
+      }
 
-    if (!res.ok) {
-      throw new Error(`Errore creazione attività su Google Tasks: ${res.statusText}`)
-    }
-
-    const created = await res.json()
-    return {
-      ...task,
-      id: created.id,
-      googleTaskId: created.id,
-      updatedAt: created.updated || new Date().toISOString(),
+      // 3. Elimina eventuali file remoti orfani di task eliminati
+      const currentTaskIds = new Set(tasks.map((t) => t.id))
+      const listRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+          `'${folderId}' in parents and trashed = false and name != '_tasks_index.json'`
+        )}&fields=files(id,name)&pageSize=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (listRes.ok) {
+        const listData = await listRes.json()
+        const files: any[] = listData.files || []
+        for (const f of files) {
+          const match = f.name?.match(/_([^_]+)\.json$/)
+          if (match && !currentTaskIds.has(match[1])) {
+            try {
+              await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+              })
+            } catch {}
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Google Drive Task Archive] Errore salvataggio task su Drive:', e)
     }
   }
 
-  public async updateGoogleTask(task: AppTaskItem): Promise<AppTaskItem> {
+  public async saveDriveTask(task: AppTaskItem, allTasks: AppTaskItem[]): Promise<void> {
     const token = this.getToken()
-    if (!token) return task
+    if (!token) return
 
-    const taskId = task.googleTaskId || task.id
-    const notes = this.formatTaskNotes(task)
-    const body: any = {
-      id: taskId,
-      title: task.title,
-      notes,
-      status: task.completed ? 'completed' : 'needsAction',
-    }
-
-    if (task.dueDate) {
-      body.due = `${task.dueDate}T00:00:00.000Z`
-    } else {
-      body.due = null
-    }
-
-    const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${encodeURIComponent(taskId)}`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
-
-    if (!res.ok) {
-      console.warn(`[Google Tasks] Errore aggiornamento (${res.status}): ${res.statusText}`)
-      return task
-    }
-
-    const updated = await res.json()
-    return {
-      ...task,
-      googleTaskId: updated.id,
-      updatedAt: updated.updated || new Date().toISOString(),
+    try {
+      const folderId = await this.resolveTaskArchiveFolderId()
+      const fileName = this.getTaskFileName(task)
+      await this.uploadOrUpdateJsonFile(
+        folderId,
+        fileName,
+        task,
+        `Attività: ${task.title} - Scadenza: ${task.dueDate || 'Nessuna'}`,
+        `_${task.id}.json`
+      )
+      // Aggiorna anche l'indice rapido
+      await this.uploadOrUpdateJsonFile(folderId, '_tasks_index.json', allTasks, 'Indice generale delle cose da fare MemoTralci')
+    } catch (e) {
+      console.warn('[Google Drive Task Archive] Errore salvataggio singolo task:', e)
     }
   }
 
-  public async deleteGoogleTask(taskId: string): Promise<boolean> {
+  public async deleteDriveTask(taskId: string, allTasks: AppTaskItem[]): Promise<boolean> {
     const token = this.getToken()
     if (!token) return true
 
     try {
-      const res = await fetch(
-        `https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${encodeURIComponent(taskId)}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        }
+      const folderId = await this.resolveTaskArchiveFolderId()
+      // Elimina il file del task
+      const searchRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+          `'${folderId}' in parents and trashed = false`
+        )}&fields=files(id,name)&pageSize=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
       )
-      return res.ok || res.status === 404
+      if (searchRes.ok) {
+        const data = await searchRes.json()
+        const files: any[] = data.files || []
+        const match = files.find((f) => f.name?.endsWith(`_${taskId}.json`))
+        if (match?.id) {
+          await fetch(`https://www.googleapis.com/drive/v3/files/${match.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        }
+      }
+      // Aggiorna indice
+      await this.uploadOrUpdateJsonFile(folderId, '_tasks_index.json', allTasks, 'Indice generale delle cose da fare MemoTralci')
+      return true
     } catch {
       return false
     }

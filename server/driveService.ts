@@ -17,8 +17,9 @@ export interface UploadedAttachment {
 }
 
 // Ensure local storage directory exists for offline/local mode fallback
-const LOCAL_STORAGE_DIR = path.resolve(process.cwd(), 'local_storage')
-const LOCAL_UPLOADS_DIR = path.resolve(LOCAL_STORAGE_DIR, 'uploads')
+export const LOCAL_STORAGE_DIR = path.resolve(process.cwd(), 'local_storage')
+export const LOCAL_UPLOADS_DIR = path.resolve(LOCAL_STORAGE_DIR, 'uploads')
+export const LOCAL_TASK_ARCHIVE_DIR = path.resolve(LOCAL_UPLOADS_DIR, 'Archivio_Task')
 
 if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
   fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true })
@@ -26,8 +27,12 @@ if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
 if (!fs.existsSync(LOCAL_UPLOADS_DIR)) {
   fs.mkdirSync(LOCAL_UPLOADS_DIR, { recursive: true })
 }
+if (!fs.existsSync(LOCAL_TASK_ARCHIVE_DIR)) {
+  fs.mkdirSync(LOCAL_TASK_ARCHIVE_DIR, { recursive: true })
+}
 
 let cachedDriveFolderId: string | null = null
+let cachedTaskArchiveFolderId: string | null = null
 
 export async function resolveDriveFolderId(drive: any): Promise<string | null> {
   const configured = (config.driveFolderId || '').trim()
@@ -74,6 +79,49 @@ export async function resolveDriveFolderId(drive: any): Promise<string | null> {
     }
   } catch (err: any) {
     console.warn('[Google Drive] Impossibile risolvere cartella:', err?.message || err)
+  }
+
+  return null
+}
+
+export async function resolveTaskArchiveFolderId(drive: any): Promise<string | null> {
+  if (cachedTaskArchiveFolderId) return cachedTaskArchiveFolderId
+
+  const parentFolderId = await resolveDriveFolderId(drive)
+  if (!parentFolderId) return null
+
+  const folderName = 'Archivio_Task'
+
+  try {
+    const q = `'${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`
+    const res = await drive.files.list({ q, fields: 'files(id, name)' })
+    const files = res.data.files || []
+
+    if (files.length > 0 && files[0].id) {
+      console.log(`[Google Drive] Trovata sottocartella task "${files[0].name}" -> ID: ${files[0].id}`)
+      cachedTaskArchiveFolderId = files[0].id
+      return files[0].id
+    }
+
+    // Automatically create subfolder inside main attachments folder
+    console.log(`[Google Drive] Creazione sottocartella "${folderName}" dentro cartella allegati...`)
+    const createRes = await drive.files.create({
+      requestBody: {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId],
+        description: 'Archivio delle attività MemoTralci organizzate per data e descrizione',
+      },
+      fields: 'id, name',
+    })
+
+    if (createRes.data.id) {
+      console.log(`[Google Drive] Sottocartella task creata con successo -> ID: ${createRes.data.id}`)
+      cachedTaskArchiveFolderId = createRes.data.id
+      return createRes.data.id
+    }
+  } catch (err: any) {
+    console.warn('[Google Drive] Impossibile risolvere sottocartella task archive:', err?.message || err)
   }
 
   return null
@@ -143,8 +191,8 @@ export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
     try {
       const folderId = await resolveDriveFolderId(drive)
       const q = folderId
-        ? `'${folderId}' in parents and trashed = false and name != 'tasks.json'`
-        : "trashed = false and name != 'tasks.json'"
+        ? `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'tasks.json' and name != '_tasks_index.json'`
+        : "trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'tasks.json' and name != '_tasks_index.json'"
 
       const response = await drive.files.list({
         q,
@@ -171,7 +219,14 @@ export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
 
   // Return local files
   if (fs.existsSync(LOCAL_UPLOADS_DIR)) {
-    const files = fs.readdirSync(LOCAL_UPLOADS_DIR)
+    const files = fs.readdirSync(LOCAL_UPLOADS_DIR).filter((fileName) => {
+      const filePath = path.join(LOCAL_UPLOADS_DIR, fileName)
+      try {
+        return !fs.statSync(filePath).isDirectory() && fileName !== 'tasks.json' && fileName !== '_tasks_index.json'
+      } catch {
+        return false
+      }
+    })
     return files.map((fileName) => {
       const filePath = path.join(LOCAL_UPLOADS_DIR, fileName)
       const stat = fs.statSync(filePath)
@@ -215,8 +270,12 @@ export async function deleteAttachment(fileId: string): Promise<boolean> {
 
 export function getLocalFilePath(fileId: string): string | null {
   const localFilePath = path.join(LOCAL_UPLOADS_DIR, fileId)
-  if (fs.existsSync(localFilePath)) {
+  if (fs.existsSync(localFilePath) && !fs.statSync(localFilePath).isDirectory()) {
     return localFilePath
+  }
+  const taskFilePath = path.join(LOCAL_TASK_ARCHIVE_DIR, fileId)
+  if (fs.existsSync(taskFilePath) && !fs.statSync(taskFilePath).isDirectory()) {
+    return taskFilePath
   }
   return null
 }

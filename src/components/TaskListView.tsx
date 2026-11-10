@@ -90,8 +90,15 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
               <span>Cose da Fare</span>
               <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
             </h1>
-            <p className="text-emerald-100 text-xs sm:text-sm mt-1 font-medium">
-              {pendingCount} da completare • {completedCount} già fatte
+            <p className="text-emerald-100 text-xs sm:text-sm mt-1 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>{pendingCount} da completare</span>
+              <span>•</span>
+              <span>{completedCount} già fatte</span>
+              <span>•</span>
+              <span className="inline-flex items-center space-x-1 bg-white/20 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-white">
+                <span>📁</span>
+                <span>Archivio: allegati/Archivio_Task</span>
+              </span>
             </p>
           </div>
 

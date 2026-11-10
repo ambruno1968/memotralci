@@ -20,7 +20,7 @@ export interface AppTaskItem {
   subtasks?: SubtaskItem[]
   attachments?: EventAttachment[]
   calendarEventId?: string // Link to calendar event if created
-  googleTaskId?: string // ID associato su Google Tasks
+  driveFileId?: string // ID file archiviato su Google Drive
   createdAt: string
   updatedAt: string
 }

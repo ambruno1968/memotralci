@@ -32,7 +32,7 @@ export const config: AppConfig = {
 }
 
 export function reloadConfig(): AppConfig {
-  const creds = inspectCredentials()
+  const creds = inspectCredentials(config)
   config.credentialType = creds.type
 
   if (creds.type === 'service_account' && creds.clientEmail && creds.raw?.private_key) {

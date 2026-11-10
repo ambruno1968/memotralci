@@ -230,13 +230,9 @@ export function App() {
   async function handleSaveTask(task: AppTaskItem) {
     const saved = await api.saveTask(task)
     setTasks((prev) => {
-      const exists = prev.some(
-        (t) => t.id === task.id || (saved.googleTaskId && t.googleTaskId === saved.googleTaskId)
-      )
+      const exists = prev.some((t) => t.id === task.id)
       if (exists) {
-        return prev.map((t) =>
-          t.id === task.id || (saved.googleTaskId && t.googleTaskId === saved.googleTaskId) ? saved : t
-        )
+        return prev.map((t) => (t.id === task.id ? saved : t))
       }
       return [saved, ...prev]
     })

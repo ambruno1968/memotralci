@@ -254,9 +254,9 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
                   <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <div>
-                      <div className="text-[10px] uppercase font-bold text-slate-400">Cose da Fare</div>
-                      <div className="font-semibold text-slate-900 dark:text-white">
-                        Google Tasks
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Archivio Task</div>
+                      <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[120px]" title="Archivio_Task dentro allegati memotralci">
+                        allegati/Archivio_Task
                       </div>
                     </div>
                   </div>

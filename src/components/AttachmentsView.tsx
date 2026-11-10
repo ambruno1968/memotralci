@@ -67,11 +67,19 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
               <span>Gestione Allegati & Documenti</span>
               <Paperclip className="w-6 h-6 text-indigo-200" />
             </h1>
-            <p className="text-indigo-100 text-xs sm:text-sm mt-1 font-medium">
-              {attachments.length} file archiviati •{' '}
-              {isGoogleDriveConfigured
-                ? '🟢 Sincronizzati su Google Drive'
-                : '🟡 Archiviati in locale (Google Drive non configurato)'}
+            <p className="text-indigo-100 text-xs sm:text-sm mt-1 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>{attachments.length} file allegati</span>
+              <span>•</span>
+              <span className="inline-flex items-center space-x-1 bg-white/20 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-white">
+                <span>📁</span>
+                <span>Sottocartella: Archivio_Task</span>
+              </span>
+              <span>•</span>
+              <span>
+                {isGoogleDriveConfigured
+                  ? '🟢 Sincronizzati su Google Drive'
+                  : '🟡 Archiviati in locale (Google Drive non configurato)'}
+              </span>
             </p>
           </div>
 
