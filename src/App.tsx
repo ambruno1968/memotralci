@@ -14,6 +14,7 @@ import type { UploadedAttachment } from './types/attachment.ts'
 import { api, type GoogleStatus } from './services/api.ts'
 import { notificationService } from './services/notifications.ts'
 import { Loader2, CheckCircle } from 'lucide-react'
+import { APP_VERSION, APP_CREDITS } from './config/version.ts'
 
 export function App() {
   const [currentView, setCurrentView] = useState<NavView>('calendar')
@@ -381,6 +382,23 @@ export function App() {
           </>
         )}
       </main>
+
+      {/* Footer con Versione e Crediti */}
+      <footer className="mt-auto border-t border-slate-200/60 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 font-medium">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold text-slate-700 dark:text-slate-300">MemoTralci</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+              {APP_VERSION}
+            </span>
+            <span>•</span>
+            <span>{APP_CREDITS.developedFor}</span>
+          </div>
+          <div>
+            <span>{APP_CREDITS.copyright}</span>
+          </div>
+        </div>
+      </footer>
 
       {/* Modals */}
       {isEventModalOpen && (

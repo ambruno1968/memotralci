@@ -17,6 +17,22 @@ export interface GoogleStatus {
   userInfo?: GoogleUserInfo | null
 }
 
+export function isRealAttachment(f: { name?: string; mimeType?: string }): boolean {
+  if (!f || !f.name) return false
+  if (f.mimeType === 'application/vnd.google-apps.folder') return false
+  const n = f.name.toLowerCase()
+  if (
+    n === 'tasks.json' ||
+    n === '_tasks_index.json' ||
+    n.includes('client secret') ||
+    n.includes('service-account')
+  ) {
+    return false
+  }
+  if (n.startsWith('[') && n.endsWith('.json')) return false
+  return true
+}
+
 export const api = {
   // Check Google status (Direct Client-Side or Backend Fallback)
   async getStatus(): Promise<GoogleStatus> {
@@ -481,13 +497,15 @@ export const api = {
     return localAttachment
   },
 
-  // Get Attachments list
+  // Get Attachments list (solo allegati veri, esclusi cartelle e file di configurazione/task)
   async getAttachments(): Promise<UploadedAttachment[]> {
-    const localFiles = await localDB.getAllAttachments()
+    const rawLocalFiles = await localDB.getAllAttachments()
+    const localFiles = rawLocalFiles.filter(isRealAttachment)
 
     if (googleClientSide.isConnected()) {
       try {
-        const driveFiles = await googleClientSide.listDriveFiles()
+        const rawDriveFiles = await googleClientSide.listDriveFiles()
+        const driveFiles = rawDriveFiles.filter(isRealAttachment)
         const driveMap = new Map(driveFiles.map((f) => [f.id, f]))
 
         // Unisci i file locali che non sono ancora su Drive
@@ -507,7 +525,8 @@ export const api = {
     try {
       const res = await fetch('/api/files', { signal: AbortSignal.timeout(4000) })
       if (res.ok) {
-        const files: UploadedAttachment[] = await res.json()
+        const rawFiles: UploadedAttachment[] = await res.json()
+        const files = rawFiles.filter(isRealAttachment)
         await localDB.saveAttachments(files)
         return files
       }

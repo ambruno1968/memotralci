@@ -16,6 +16,7 @@ import {
 import { api, type GoogleStatus } from '../services/api.ts'
 import { googleClientSide, GOOGLE_DEFAULTS } from '../services/googleClientSide.ts'
 import { localDB } from '../services/db.ts'
+import { APP_CREDITS, APP_VERSION } from '../config/version.ts'
 
 interface GoogleSettingsModalProps {
   status: GoogleStatus
@@ -28,7 +29,7 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
   onClose,
   onRefreshStatus,
 }) => {
-  const [activeTab, setActiveTab] = useState<'access' | 'backup'>('access')
+  const [activeTab, setActiveTab] = useState<'access' | 'backup' | 'credits'>('access')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -167,6 +168,17 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
           >
             <Download className="w-4 h-4" />
             <span>Backup Dati</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('credits')}
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center space-x-2 ${
+              activeTab === 'credits'
+                ? 'border-teal-600 text-teal-600 dark:border-teal-400 dark:text-teal-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Info className="w-4 h-4" />
+            <span>Versione & Crediti</span>
           </button>
         </div>
 
@@ -323,6 +335,72 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
                   Basta effettuare l'accesso una sola volta con il pulsante sopra. La sincronizzazione si aggiorna
                   automaticamente in tempo reale.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'credits' && (
+            <div className="space-y-4">
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-teal-500/10 via-emerald-500/10 to-transparent border border-teal-200/60 dark:border-teal-800/60">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl overflow-hidden shadow-md ring-1 ring-teal-500/30 flex items-center justify-center bg-white dark:bg-slate-800">
+                    <img src={appLogo} alt="MemoTralci" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-base font-black text-slate-900 dark:text-white">
+                        {APP_CREDITS.appName}
+                      </h3>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-teal-600 text-white shadow-xs">
+                        {APP_VERSION}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      {APP_CREDITS.description}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/50 dark:border-slate-700/50">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Sviluppato per</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                      {APP_CREDITS.developedFor}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/50 dark:border-slate-700/50">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Organizzazione</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                      {APP_CREDITS.organization}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/50 dark:border-slate-700/50">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Standard Informatico</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                      SemVer 2.0.0 (Semantic Versioning)
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/50 dark:border-slate-700/50">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Data Release</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                      {APP_CREDITS.releaseDate}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 p-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/50 dark:border-slate-700/50 text-xs">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Contatto Segreteria</div>
+                  <a
+                    href={`mailto:${APP_CREDITS.contactEmail}`}
+                    className="font-bold text-teal-600 dark:text-teal-400 hover:underline mt-0.5 block"
+                  >
+                    {APP_CREDITS.contactEmail}
+                  </a>
+                </div>
+
+                <div className="mt-4 text-center text-[11px] text-slate-400 font-medium">
+                  {APP_CREDITS.copyright}
+                </div>
               </div>
             </div>
           )}

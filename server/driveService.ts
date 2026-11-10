@@ -191,8 +191,8 @@ export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
     try {
       const folderId = await resolveDriveFolderId(drive)
       const q = folderId
-        ? `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'tasks.json' and name != '_tasks_index.json'`
-        : "trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'tasks.json' and name != '_tasks_index.json'"
+        ? `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`
+        : "trashed = false and mimeType != 'application/vnd.google-apps.folder'"
 
       const response = await drive.files.list({
         q,
@@ -201,7 +201,22 @@ export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
         orderBy: 'createdTime desc',
       })
 
-      return (response.data.files || []).map((f: any) => ({
+      const files = (response.data.files || []).filter((f: any) => {
+        if (!f || !f.name) return false
+        const n = f.name.toLowerCase()
+        if (
+          n === 'tasks.json' ||
+          n === '_tasks_index.json' ||
+          n.includes('client secret') ||
+          n.includes('service-account')
+        ) {
+          return false
+        }
+        if (n.startsWith('[') && n.endsWith('.json')) return false
+        return true
+      })
+
+      return files.map((f: any) => ({
         id: f.id!,
         name: f.name || 'File senza nome',
         mimeType: f.mimeType || 'application/octet-stream',

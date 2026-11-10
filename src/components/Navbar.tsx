@@ -1,5 +1,6 @@
 import React from 'react'
 import appLogo from '../assets/logo-icon.png'
+import { APP_VERSION } from '../config/version.ts'
 import {
   CalendarDays,
   CheckSquare,
@@ -70,6 +71,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center space-x-1.5">
                 <span className="text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent">
                   MemoTralci
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-teal-100/90 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800/80">
+                  {APP_VERSION}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block font-medium">

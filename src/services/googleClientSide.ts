@@ -19,8 +19,9 @@ export const GOOGLE_DEFAULTS = {
   clientId: '944725762658-ocihkj4r8b5usbitr35p32ai0agkubkb.apps.googleusercontent.com',
   calendarName: 'Segreteria',
   calendarEmail: 'segreteria.cometralcinovara@gmail.com',
-  driveFolderName: 'allegati memotralci',
+  driveFolderName: 'Allegati memotralci',
   driveFolderId: '1HMcovycbLn9TKAXs1CmrcSylcDZj0GXc',
+  taskArchiveFolderId: '1P-04yPjLhwQrPbR2oiMyxIeI6Z2l69zD',
   scopes: [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
@@ -433,6 +434,11 @@ class GoogleClientSide {
 
   public async resolveDriveFolderId(): Promise<string> {
     if (this.cachedFolderId) return this.cachedFolderId
+    if (GOOGLE_DEFAULTS.driveFolderId) {
+      this.cachedFolderId = GOOGLE_DEFAULTS.driveFolderId
+      localStorage.setItem(STORAGE_KEYS.FOLDER_ID, GOOGLE_DEFAULTS.driveFolderId)
+      return GOOGLE_DEFAULTS.driveFolderId
+    }
 
     const token = this.getToken()
     if (!token) return GOOGLE_DEFAULTS.driveFolderId
@@ -559,7 +565,7 @@ class GoogleClientSide {
     if (!token) return []
 
     const folderId = await this.resolveDriveFolderId()
-    const query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'tasks.json' and name != '_tasks_index.json'`
+    const query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`
 
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
@@ -575,7 +581,25 @@ class GoogleClientSide {
     const data = await res.json()
     const files: any[] = data.files || []
 
-    return files.map((f) => ({
+    // Filtra in modo rigoroso per mostrare SOLO gli allegati veri:
+    // Esclude cartelle, file di sistema dei task e credenziali
+    const realFiles = files.filter((f) => {
+      if (!f || !f.name) return false
+      if (f.mimeType === 'application/vnd.google-apps.folder') return false
+      const n = f.name.toLowerCase()
+      if (
+        n === 'tasks.json' ||
+        n === '_tasks_index.json' ||
+        n.includes('client secret') ||
+        n.includes('service-account')
+      ) {
+        return false
+      }
+      if (n.startsWith('[') && n.endsWith('.json')) return false
+      return true
+    })
+
+    return realFiles.map((f) => ({
       id: f.id,
       name: f.name,
       mimeType: f.mimeType,
@@ -594,6 +618,11 @@ class GoogleClientSide {
 
   public async resolveTaskArchiveFolderId(): Promise<string> {
     if (this.cachedTaskFolderId) return this.cachedTaskFolderId
+    if (GOOGLE_DEFAULTS.taskArchiveFolderId) {
+      this.cachedTaskFolderId = GOOGLE_DEFAULTS.taskArchiveFolderId
+      localStorage.setItem(STORAGE_KEYS.TASK_FOLDER_ID, GOOGLE_DEFAULTS.taskArchiveFolderId)
+      return GOOGLE_DEFAULTS.taskArchiveFolderId
+    }
 
     const parentFolderId = await this.resolveDriveFolderId()
     const token = this.getToken()
