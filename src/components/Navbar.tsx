@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import {
   CalendarDays,
   CheckSquare,
@@ -25,6 +25,8 @@ interface NavbarProps {
   tasksPendingCount: number
   canInstallPwa: boolean
   onInstallPwa: () => void
+  isDark: boolean
+  onToggleDark: () => void
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -38,63 +40,48 @@ export const Navbar: React.FC<NavbarProps> = ({
   tasksPendingCount,
   canInstallPwa,
   onInstallPwa,
+  isDark,
+  onToggleDark,
 }) => {
-  const [isDark, setIsDark] = useState(() => {
-    return (
-      localStorage.getItem('memotralci_theme') === 'dark' ||
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    )
-  })
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('memotralci_theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('memotralci_theme', 'light')
-    }
-  }, [isDark])
-
   return (
     <>
       {/* Desktop & Tablet Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 shadow-sm transition">
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/90 dark:border-slate-800 shadow-sm transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand Logo */}
           <div
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => onSelectView('calendar')}
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 group-hover:scale-105 transition">
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-base font-black tracking-tight bg-gradient-to-r from-indigo-700 via-purple-700 to-emerald-600 dark:from-indigo-300 dark:via-purple-300 dark:to-emerald-400 bg-clip-text text-transparent">
+                <span className="text-base font-black tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-600 dark:from-indigo-400 dark:via-purple-400 dark:to-emerald-400 bg-clip-text text-transparent">
                   MemoTralci
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                <span className="text-[10px] uppercase font-black tracking-widest px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
                   PWA
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 -mt-0.5 hidden sm:block">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block font-medium">
                 Agenda, To-Do & Allegati Google
               </p>
             </div>
           </div>
 
           {/* Center Navigation Pills (Desktop/Tablet) */}
-          <nav className="hidden md:flex items-center space-x-1 bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-inner">
+          <nav className="hidden md:flex items-center space-x-1 bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-inner">
             <button
               onClick={() => onSelectView('calendar')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
                 currentView === 'calendar'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm font-black'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <CalendarDays className="w-4 h-4" />
+              <CalendarDays className="w-4 h-4 text-indigo-500" />
               <span>Agenda & Calendario</span>
             </button>
 
@@ -102,11 +89,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectView('tasks')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition relative ${
                 currentView === 'tasks'
-                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm font-black'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <CheckSquare className="w-4 h-4" />
+              <CheckSquare className="w-4 h-4 text-emerald-500" />
               <span>Cose da Fare</span>
               {tasksPendingCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center font-bold">
@@ -119,14 +106,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectView('attachments')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
                 currentView === 'attachments'
-                  ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                  ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm font-black'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Paperclip className="w-4 h-4" />
+              <Paperclip className="w-4 h-4 text-purple-500" />
               <span>Allegati</span>
               {attachmentsCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 text-[10px] font-bold">
+                <span className="px-1.5 py-0.2 rounded-md bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold">
                   {attachmentsCount}
                 </span>
               )}
@@ -137,14 +124,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-2">
             {/* Dark Mode Switcher */}
             <button
-              onClick={() => setIsDark((d) => !d)}
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 transition"
+              type="button"
+              onClick={onToggleDark}
+              className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shadow-xs cursor-pointer"
               title={isDark ? 'Passa al tema Chiaro' : 'Passa al tema Scuro'}
+              aria-label="Toggle tema scuro/chiaro"
             >
               {isDark ? (
-                <Sun className="w-4 h-4 text-amber-400" />
+                <Sun className="w-4 h-4 text-amber-400 animate-spin-slow" />
               ) : (
-                <Moon className="w-4 h-4 text-slate-600" />
+                <Moon className="w-4 h-4 text-indigo-600" />
               )}
             </button>
 
@@ -152,21 +141,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             {canInstallPwa && (
               <button
                 onClick={onInstallPwa}
-                className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold hover:bg-emerald-100 transition shadow-2xs"
+                className="hidden sm:flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-bold hover:bg-emerald-100 transition shadow-xs"
                 title="Installa questa app sul dispositivo"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Installa App</span>
+                <span>Installa</span>
               </button>
             )}
 
             {/* Google Sync Status Pill */}
             <button
               onClick={onOpenGoogleSettings}
-              className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition shadow-2xs ${
+              className={`flex items-center space-x-2 px-3 py-2 rounded-2xl border text-xs font-bold transition shadow-xs cursor-pointer ${
                 googleStatus.isGoogleConfigured
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
               }`}
               title="Apri impostazioni connessione Google"
             >
@@ -180,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <>
                   <CloudOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span className="hidden sm:inline">Modalità Locale</span>
-                  <span className="sm:hidden">Google</span>
+                  <span className="sm:hidden">Locale</span>
                 </>
               )}
             </button>
@@ -188,7 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Quick Add Button */}
             <button
               onClick={currentView === 'tasks' ? onOpenTaskModal : onOpenEventModal}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-xs shadow-md shadow-indigo-500/25 transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-4 py-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs shadow-md shadow-indigo-500/30 transition cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">
@@ -206,7 +195,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onSelectView('calendar')}
             className={`flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-bold transition ${
               currentView === 'calendar'
-                ? 'text-indigo-600 dark:text-indigo-400'
+                ? 'text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -218,7 +207,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onSelectView('tasks')}
             className={`flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-bold transition relative ${
               currentView === 'tasks'
-                ? 'text-emerald-600 dark:text-emerald-400'
+                ? 'text-emerald-600 dark:text-emerald-400 font-black'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -237,7 +226,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onSelectView('attachments')}
             className={`flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-bold transition ${
               currentView === 'attachments'
-                ? 'text-purple-600 dark:text-purple-400'
+                ? 'text-purple-600 dark:text-purple-400 font-black'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >

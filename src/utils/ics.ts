@@ -55,3 +55,4 @@ export function exportEventsToIcs(events: AppCalendarEvent[], filename = 'memotr
   a.click()
   URL.revokeObjectURL(url)
 }
+

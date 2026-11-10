@@ -12,6 +12,7 @@ import type { AppCalendarEvent } from './types/event.ts'
 import type { AppTaskItem } from './types/task.ts'
 import type { UploadedAttachment } from './types/attachment.ts'
 import { api, type GoogleStatus } from './services/api.ts'
+import { notificationService } from './services/notifications.ts'
 import { Loader2 } from 'lucide-react'
 
 export function App() {
@@ -27,6 +28,38 @@ export function App() {
     serviceAccountConfigured: false,
   })
   const [loading, setLoading] = useState(true)
+
+  // Dark mode state
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    const saved = localStorage.getItem('memotralci_theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  function handleToggleDark() {
+    setIsDark((prev) => {
+      const next = !prev
+      if (next) {
+        document.documentElement.classList.add('dark')
+        localStorage.setItem('memotralci_theme', 'dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+        localStorage.setItem('memotralci_theme', 'light')
+      }
+      return next
+    })
+  }
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('memotralci_theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('memotralci_theme', 'light')
+    }
+  }, [isDark])
 
   // Modals state
   const [isEventModalOpen, setIsEventModalOpen] = useState(false)
@@ -82,6 +115,9 @@ export function App() {
       setEvents(fetchedEvents)
       setTasks(fetchedTasks)
       setAttachments(fetchedAttachments)
+
+      // Check upcoming event & task reminders
+      notificationService.checkReminders(fetchedEvents, fetchedTasks)
     } catch (err) {
       console.error('Errore caricamento dati:', err)
     } finally {
@@ -109,7 +145,6 @@ export function App() {
       return [savedEvent, ...prev]
     })
 
-    // If event has attachments, add them to global attachments list if not already there
     if (savedEvent.attachments && savedEvent.attachments.length > 0) {
       setAttachments((prev) => {
         const existingIds = new Set(prev.map((a) => a.id))
@@ -155,7 +190,6 @@ export function App() {
 
     await api.saveTasks(updatedTasks)
 
-    // Sync task attachments to global list
     if (task.attachments && task.attachments.length > 0) {
       setAttachments((prev) => {
         const existingIds = new Set(prev.map((a) => a.id))
@@ -240,7 +274,7 @@ export function App() {
   const pendingTasksCount = tasks.filter((t) => !t.completed).length
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition">
+    <div className="min-h-screen text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
       {/* PWA Install Banner */}
       <PwaInstallBanner canInstall={canInstallPwa} onInstall={handleInstallPwa} />
 
@@ -256,14 +290,18 @@ export function App() {
         tasksPendingCount={pendingTasksCount}
         canInstallPwa={canInstallPwa}
         onInstallPwa={handleInstallPwa}
+        isDark={isDark}
+        onToggleDark={handleToggleDark}
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-            <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-3" />
-            <p className="text-sm font-semibold">Caricamento MemoTralci...</p>
+          <div className="flex flex-col items-center justify-center py-28 text-slate-400">
+            <Loader2 className="w-12 h-12 animate-spin text-indigo-500 mb-3" />
+            <p className="text-sm font-black text-slate-600 dark:text-slate-300">
+              Caricamento MemoTralci...
+            </p>
           </div>
         ) : (
           <>

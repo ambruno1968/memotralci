@@ -1,64 +1,94 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" fill="none">
-  <!-- Subtle decorative calendar & planner motifs for background texture -->
-  <g stroke="#6366f1" stroke-width="1.5" stroke-opacity="0.07" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Mini Calendar Grid 1 -->
-    <rect x="60" y="60" width="140" height="120" rx="16" fill="none"/>
-    <line x1="60" y1="95" x2="200" y2="95"/>
-    <circle cx="85" cy="78" r="4" fill="#6366f1" fill-opacity="0.08"/>
-    <circle cx="175" cy="78" r="4" fill="#6366f1" fill-opacity="0.08"/>
-    <line x1="90" y1="115" x2="110" y2="115"/>
-    <line x1="125" y1="115" x2="145" y2="115"/>
-    <line x1="160" y1="115" x2="175" y2="115"/>
-    <line x1="90" y1="135" x2="110" y2="135"/>
-    <line x1="125" y1="135" x2="145" y2="135"/>
-    <line x1="160" y1="135" x2="175" y2="135"/>
-    <line x1="90" y1="155" x2="110" y2="155"/>
-    <line x1="125" y1="155" x2="145" y2="155"/>
-
-    <!-- Clock dial motif -->
-    <circle cx="480" cy="120" r="45" fill="none"/>
-    <line x1="480" y1="120" x2="480" y2="95" stroke-width="2"/>
-    <line x1="480" y1="120" x2="502" y2="120" stroke-width="2"/>
-    <circle cx="480" cy="120" r="3" fill="#6366f1" fill-opacity="0.12"/>
-    <line x1="480" y1="78" x2="480" y2="82"/>
-    <line x1="480" y1="158" x2="480" y2="162"/>
-    <line x1="438" y1="120" x2="442" y2="120"/>
-    <line x1="518" y1="120" x2="522" y2="120"/>
-
-    <!-- Clipboard Checklist motif -->
-    <rect x="360" y="320" width="130" height="170" rx="14" fill="none"/>
-    <rect x="395" y="308" width="60" height="20" rx="6" fill="#6366f1" fill-opacity="0.04"/>
-    <circle cx="385" cy="355" r="7" fill="none"/>
-    <line x1="405" y1="355" x2="465" y2="355"/>
-    <path d="M 380 395 L 385 400 L 393 390"/>
-    <line x1="405" y1="395" x2="465" y2="395"/>
-    <circle cx="385" cy="435" r="7" fill="none"/>
-    <line x1="405" y1="435" x2="465" y2="435"/>
-    <circle cx="385" cy="465" r="7" fill="none"/>
-    <line x1="405" y1="465" x2="450" y2="465"/>
-
-    <!-- Mini Calendar Month Card 2 -->
-    <rect x="80" y="360" width="160" height="140" rx="18" fill="none"/>
-    <line x1="80" y1="400" x2="240" y2="400"/>
-    <rect x="105" y="348" width="16" height="24" rx="6" fill="#6366f1" fill-opacity="0.06"/>
-    <rect x="195" y="348" width="16" height="24" rx="6" fill="#6366f1" fill-opacity="0.06"/>
-    <circle cx="115" cy="425" r="6" fill="#6366f1" fill-opacity="0.08"/>
-    <circle cx="145" cy="425" r="6" fill="none"/>
-    <circle cx="175" cy="425" r="6" fill="none"/>
-    <circle cx="205" cy="425" r="6" fill="none"/>
-    <circle cx="115" cy="455" r="6" fill="none"/>
-    <circle cx="145" cy="455" r="6" fill="#6366f1" fill-opacity="0.12"/>
-    <circle cx="175" cy="455" r="6" fill="none"/>
-    <circle cx="205" cy="455" r="6" fill="none"/>
-    <circle cx="115" cy="480" r="6" fill="none"/>
-    <circle cx="145" cy="480" r="6" fill="none"/>
-    <circle cx="175" cy="480" r="6" fill="#6366f1" fill-opacity="0.08"/>
-
-    <!-- Paperclip doodle motif -->
-    <path d="M 290 190 C 298 178 314 178 322 190 L 340 220 C 352 238 335 258 318 245 L 298 220 C 290 208 300 198 308 205 L 322 225"/>
-
-    <!-- Star / Note sparkle -->
-    <path d="M 280 80 Q 280 100 260 100 Q 280 100 280 120 Q 280 100 300 100 Q 280 100 280 80 Z" fill="#6366f1" fill-opacity="0.05"/>
-    <path d="M 520 250 Q 520 265 505 265 Q 520 265 520 280 Q 520 265 535 265 Q 520 265 520 250 Z" fill="#6366f1" fill-opacity="0.05"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="0 0 500 500" fill="none">
+  <!-- Vibrant, clearly visible planner & calendar illustration motifs -->
+  
+  <!-- Desk Calendar Page 1 (Top Left) -->
+  <g transform="translate(30, 30) rotate(-4)">
+    <rect width="130" height="110" rx="14" fill="#ffffff" fill-opacity="0.25" stroke="#6366f1" stroke-width="2" stroke-opacity="0.28"/>
+    <!-- Top colored banner -->
+    <path d="M 0 14 C 0 6.268 6.268 0 14 0 L 116 0 C 123.732 0 130 6.268 130 14 L 130 32 L 0 32 Z" fill="#6366f1" fill-opacity="0.22"/>
+    <!-- Binder rings -->
+    <rect x="25" y="-6" width="10" height="14" rx="4" fill="#6366f1" fill-opacity="0.45"/>
+    <rect x="60" y="-6" width="10" height="14" rx="4" fill="#6366f1" fill-opacity="0.45"/>
+    <rect x="95" y="-6" width="10" height="14" rx="4" fill="#6366f1" fill-opacity="0.45"/>
+    <!-- Date number "15" -->
+    <text x="65" y="80" font-family="system-ui, sans-serif" font-size="34" font-weight="900" fill="#6366f1" fill-opacity="0.25" text-anchor="middle">15</text>
+    <rect x="20" y="92" width="90" height="6" rx="3" fill="#10b981" fill-opacity="0.3"/>
   </g>
+
+  <!-- Big Clock Dial Motif (Top Right) -->
+  <g transform="translate(370, 70)">
+    <circle cx="50" cy="50" r="46" fill="#ffffff" fill-opacity="0.2" stroke="#8b5cf6" stroke-width="2.2" stroke-opacity="0.26"/>
+    <!-- Ticks -->
+    <line x1="50" y1="12" x2="50" y2="18" stroke="#8b5cf6" stroke-width="2.5" stroke-opacity="0.35"/>
+    <line x1="50" y1="82" x2="50" y2="88" stroke="#8b5cf6" stroke-width="2.5" stroke-opacity="0.35"/>
+    <line x1="12" y1="50" x2="18" y2="50" stroke="#8b5cf6" stroke-width="2.5" stroke-opacity="0.35"/>
+    <line x1="82" y1="50" x2="88" y2="50" stroke="#8b5cf6" stroke-width="2.5" stroke-opacity="0.35"/>
+    <!-- Clock Hands (10:10) -->
+    <line x1="50" y1="50" x2="35" y2="28" stroke="#8b5cf6" stroke-width="3" stroke-linecap="round" stroke-opacity="0.35"/>
+    <line x1="50" y1="50" x2="72" y2="50" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-opacity="0.4"/>
+    <circle cx="50" cy="50" r="4" fill="#8b5cf6" fill-opacity="0.4"/>
+  </g>
+
+  <!-- Sticky Note / Task card (Center) -->
+  <g transform="translate(200, 160) rotate(6)">
+    <rect width="105" height="105" rx="10" fill="#fef3c7" fill-opacity="0.35" stroke="#f59e0b" stroke-width="1.8" stroke-opacity="0.3"/>
+    <!-- Pin / tape -->
+    <rect x="36" y="-6" width="32" height="12" rx="3" fill="#f59e0b" fill-opacity="0.4"/>
+    <!-- Checklist rows -->
+    <circle cx="18" cy="28" r="4" fill="#10b981" fill-opacity="0.4"/>
+    <line x1="28" y1="28" x2="85" y2="28" stroke="#f59e0b" stroke-width="2.2" stroke-opacity="0.3" stroke-linecap="round"/>
+    <circle cx="18" cy="50" r="4" fill="#10b981" fill-opacity="0.4"/>
+    <line x1="28" y1="50" x2="75" y2="50" stroke="#f59e0b" stroke-width="2.2" stroke-opacity="0.3" stroke-linecap="round"/>
+    <circle cx="18" cy="72" r="4" stroke="#f59e0b" stroke-width="1.8" stroke-opacity="0.35" fill="none"/>
+    <line x1="28" y1="72" x2="80" y2="72" stroke="#f59e0b" stroke-width="2.2" stroke-opacity="0.3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Big Calendar Grid Card (Bottom Left) -->
+  <g transform="translate(40, 290) rotate(3)">
+    <rect width="160" height="150" rx="16" fill="#ffffff" fill-opacity="0.25" stroke="#10b981" stroke-width="2" stroke-opacity="0.28"/>
+    <!-- Header banner in emerald -->
+    <path d="M 0 16 C 0 7.163 7.163 0 16 0 L 144 0 C 152.837 0 160 7.163 160 16 L 160 38 L 0 38 Z" fill="#10b981" fill-opacity="0.22"/>
+    <!-- Binder rings -->
+    <rect x="35" y="-8" width="12" height="16" rx="4" fill="#10b981" fill-opacity="0.45"/>
+    <rect x="115" y="-8" width="12" height="16" rx="4" fill="#10b981" fill-opacity="0.45"/>
+    
+    <!-- Mini dots grid 4x3 -->
+    <circle cx="35" cy="58" r="6" fill="#6366f1" fill-opacity="0.3"/>
+    <circle cx="65" cy="58" r="6" fill="#10b981" fill-opacity="0.35"/>
+    <circle cx="95" cy="58" r="6" fill="#cbd5e1" fill-opacity="0.35"/>
+    <circle cx="125" cy="58" r="6" fill="#cbd5e1" fill-opacity="0.35"/>
+
+    <circle cx="35" cy="88" r="6" fill="#cbd5e1" fill-opacity="0.35"/>
+    <circle cx="65" cy="88" r="6" fill="#f59e0b" fill-opacity="0.35"/>
+    <circle cx="95" cy="88" r="7" fill="#ec4899" fill-opacity="0.4"/>
+    <circle cx="125" cy="88" r="6" fill="#cbd5e1" fill-opacity="0.35"/>
+
+    <circle cx="35" cy="118" r="6" fill="#cbd5e1" fill-opacity="0.35"/>
+    <circle cx="65" cy="118" r="6" fill="#cbd5e1" fill-opacity="0.35"/>
+    <circle cx="95" cy="118" r="6" fill="#10b981" fill-opacity="0.35"/>
+    <circle cx="125" cy="118" r="6" fill="#6366f1" fill-opacity="0.3"/>
+  </g>
+
+  <!-- Big Paperclip & Document (Bottom Right) -->
+  <g transform="translate(320, 310) rotate(-5)">
+    <!-- Document -->
+    <rect width="120" height="145" rx="12" fill="#ffffff" fill-opacity="0.25" stroke="#ec4899" stroke-width="2" stroke-opacity="0.28"/>
+    <!-- Folded corner -->
+    <path d="M 95 0 L 120 25 L 95 25 Z" fill="#ec4899" fill-opacity="0.25"/>
+    <line x1="20" y1="35" x2="80" y2="35" stroke="#ec4899" stroke-width="3" stroke-linecap="round" stroke-opacity="0.3"/>
+    <line x1="20" y1="55" x2="100" y2="55" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25"/>
+    <line x1="20" y1="75" x2="90" y2="75" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25"/>
+    <line x1="20" y1="95" x2="95" y2="95" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25"/>
+    <line x1="20" y1="115" x2="70" y2="115" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25"/>
+
+    <!-- Shiny metallic Clip -->
+    <path d="M 35 15 C 35 0 65 0 65 15 L 65 55 C 65 65 45 65 45 55 L 45 25 C 45 20 55 20 55 25 L 55 45" 
+          stroke="#6366f1" stroke-width="3.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/>
+  </g>
+
+  <!-- Subtle sparkle stars and dots -->
+  <path d="M 230 40 Q 230 55 215 55 Q 230 55 230 70 Q 230 55 245 55 Q 230 55 230 40 Z" fill="#f59e0b" fill-opacity="0.35"/>
+  <path d="M 450 240 Q 450 252 438 252 Q 450 252 450 264 Q 450 252 462 252 Q 450 252 450 240 Z" fill="#ec4899" fill-opacity="0.35"/>
+  <circle cx="270" cy="380" r="4" fill="#10b981" fill-opacity="0.35"/>
+  <circle cx="150" cy="220" r="3" fill="#6366f1" fill-opacity="0.35"/>
 </svg>
