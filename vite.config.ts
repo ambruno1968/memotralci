@@ -5,6 +5,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
+  build: {
+    outDir: 'docs',
+    emptyOutDir: true,
+  },
   plugins: [
     tailwindcss(),
     react(),
@@ -20,10 +25,10 @@ export default defineConfig({
         'robots.txt',
       ],
       manifest: {
-        // ID univoco per evitare sovrapposizioni con altre PWA nello stesso host o repository
-        id: '/memotralci/?id=memotralci-pwa',
-        start_url: '/?source=pwa&app=memotralci',
-        scope: '/',
+        // ID univoco per evitare sovrapposizioni con altre PWA
+        id: 'https://ambruno1968.github.io/memotralci/?id=memotralci-pwa',
+        start_url: './?source=pwa&app=memotralci',
+        scope: './',
         name: 'MemoTralci - Agenda, Note & Allegati',
         short_name: 'MemoTralci',
         description: 'Gestione agenda, calendario, cose da fare e allegati collegati all\'account Google - Come Tralci Novara',
@@ -34,25 +39,25 @@ export default defineConfig({
         categories: ['productivity', 'utilities'],
         icons: [
           {
-            src: '/icon-192.png',
+            src: 'icon-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/icon-512.png',
+            src: 'icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/icon-512.png',
+            src: 'icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
           },
           {
-            src: '/favicon.svg',
+            src: 'favicon.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
             purpose: 'any',

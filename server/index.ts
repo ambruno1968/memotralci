@@ -281,13 +281,16 @@ app.delete('/api/files/:id', async (req, res) => {
   }
 })
 
-// Serve static frontend files if production build exists
-const distPath = path.resolve(process.cwd(), 'dist')
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath))
+// Serve static frontend files if production build exists (docs or dist)
+const staticPath = fs.existsSync(path.resolve(process.cwd(), 'docs'))
+  ? path.resolve(process.cwd(), 'docs')
+  : path.resolve(process.cwd(), 'dist')
+
+if (fs.existsSync(staticPath)) {
+  app.use(express.static(staticPath))
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api')) {
-      return res.sendFile(path.join(distPath, 'index.html'))
+      return res.sendFile(path.join(staticPath, 'index.html'))
     }
     next()
   })
