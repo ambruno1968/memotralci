@@ -13,7 +13,7 @@ import type { AppTaskItem } from './types/task.ts'
 import type { UploadedAttachment } from './types/attachment.ts'
 import { api, type GoogleStatus } from './services/api.ts'
 import { notificationService } from './services/notifications.ts'
-import { Loader2 } from 'lucide-react'
+import { Loader2, CheckCircle } from 'lucide-react'
 
 export function App() {
   const [currentView, setCurrentView] = useState<NavView>('calendar')
@@ -101,8 +101,13 @@ export function App() {
     })
   }
 
-  // Load Initial Data
-  async function loadAllData() {
+  // Bidirectional Sync state
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncNotice, setSyncNotice] = useState<string | null>(null)
+
+  // Load Data with Bidirectional Sync
+  async function loadAllData(showSyncIndicator = false) {
+    if (showSyncIndicator) setIsSyncing(true)
     try {
       const [status, fetchedEvents, fetchedTasks, fetchedAttachments] = await Promise.all([
         api.getStatus(),
@@ -118,16 +123,62 @@ export function App() {
 
       // Check upcoming event & task reminders
       notificationService.checkReminders(fetchedEvents, fetchedTasks)
+
+      if (showSyncIndicator) {
+        const calName = status.resolvedCalendar || status.calendarId || 'Google Calendar'
+        setSyncNotice(
+          status.isGoogleConfigured
+            ? `Sincronizzato con Google Calendar (${calName})`
+            : 'Sincronizzato con archivio locale'
+        )
+        setTimeout(() => setSyncNotice(null), 3500)
+      }
     } catch (err) {
       console.error('Errore caricamento dati:', err)
     } finally {
       setLoading(false)
+      if (showSyncIndicator) setIsSyncing(false)
     }
   }
 
+  // Initial load and URL check
   useEffect(() => {
     loadAllData()
+
+    // Check if returned from Google OAuth
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('google_connected') === 'true') {
+      window.history.replaceState({}, '', window.location.pathname)
+      loadAllData(true)
+    }
   }, [])
+
+  // Auto-poll Google Calendar every 25 seconds for bidirectional sync
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadAllData(false)
+    }, 25000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Auto-sync when window regains focus or tab becomes active
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        loadAllData(false)
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [])
+
+  async function handleManualSync() {
+    await loadAllData(true)
+  }
 
   // Event handlers
   function handleOpenEventModal(event?: AppCalendarEvent, initialDate?: string) {
@@ -292,6 +343,8 @@ export function App() {
         onInstallPwa={handleInstallPwa}
         isDark={isDark}
         onToggleDark={handleToggleDark}
+        onSync={handleManualSync}
+        isSyncing={isSyncing}
       />
 
       {/* Main Container */}
@@ -384,6 +437,14 @@ export function App() {
           attachment={previewAttachment}
           onClose={() => setPreviewAttachment(null)}
         />
+      )}
+
+      {/* Sync Toast Feedback */}
+      {syncNotice && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-teal-900/95 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-2xl shadow-2xl border border-teal-500/40 backdrop-blur-md flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{syncNotice}</span>
+        </div>
       )}
     </div>
   )

@@ -9,6 +9,7 @@ import {
   CloudOff,
   Sun,
   Moon,
+  RefreshCw,
 } from 'lucide-react'
 import type { GoogleStatus } from '../services/api.ts'
 
@@ -27,6 +28,8 @@ interface NavbarProps {
   onInstallPwa: () => void
   isDark: boolean
   onToggleDark: () => void
+  onSync?: () => void
+  isSyncing?: boolean
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onInstallPwa,
   isDark,
   onToggleDark,
+  onSync,
+  isSyncing = false,
 }) => {
   return (
     <>
@@ -153,6 +158,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* Manual Sync Button */}
+            {onSync && (
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={isSyncing}
+                className={`p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 transition shadow-xs cursor-pointer ${
+                  isSyncing ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="Sincronizza subito in entrambe le direzioni con Google Calendar e Drive"
+                aria-label="Sincronizza"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 text-teal-600 dark:text-teal-400 ${
+                    isSyncing ? 'animate-spin' : ''
+                  }`}
+                />
+              </button>
+            )}
+
             {/* Google Sync Status Pill */}
             <button
               onClick={onOpenGoogleSettings}
@@ -166,13 +191,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               {googleStatus.isGoogleConfigured ? (
                 <>
                   <Cloud className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="hidden sm:inline">Google Connesso</span>
+                  <span className="hidden sm:inline">
+                    {googleStatus.resolvedCalendar || 'Segreteria'}
+                  </span>
                   <span className="sm:hidden">Google</span>
                 </>
               ) : (
                 <>
                   <CloudOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="hidden sm:inline">Modalità Locale</span>
+                  <span className="hidden sm:inline">Configura Google</span>
                   <span className="sm:hidden">Locale</span>
                 </>
               )}

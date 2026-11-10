@@ -27,17 +27,72 @@ if (!fs.existsSync(LOCAL_UPLOADS_DIR)) {
   fs.mkdirSync(LOCAL_UPLOADS_DIR, { recursive: true })
 }
 
+let cachedDriveFolderId: string | null = null
+
+export async function resolveDriveFolderId(drive: any): Promise<string | null> {
+  const configured = (config.driveFolderId || '').trim()
+
+  // If already an alphanumeric Google Drive ID (no spaces, length >= 15)
+  if (configured && /^[a-zA-Z0-9_-]{15,}$/.test(configured)) {
+    cachedDriveFolderId = configured
+    return configured
+  }
+
+  if (cachedDriveFolderId) return cachedDriveFolderId
+
+  const folderName = configured || 'allegati memotralci'
+
+  try {
+    // Search for existing folder with this name
+    const q = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName.replace(/'/g, "\\'")}' and trashed = false`
+    const res = await drive.files.list({ q, fields: 'files(id, name)' })
+    const files = res.data.files || []
+
+    if (files.length > 0 && files[0].id) {
+      console.log(`[Google Drive] Trovata cartella "${files[0].name}" -> ID: ${files[0].id}`)
+      cachedDriveFolderId = files[0].id
+      config.driveFolderId = files[0].id
+      return files[0].id
+    }
+
+    // Automatically create folder if not found
+    console.log(`[Google Drive] Creazione automatica cartella "${folderName}" su Google Drive...`)
+    const createRes = await drive.files.create({
+      requestBody: {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        description: 'Cartella creata da MemoTralci per gli allegati',
+      },
+      fields: 'id, name',
+    })
+
+    if (createRes.data.id) {
+      console.log(`[Google Drive] Cartella creata con successo -> ID: ${createRes.data.id}`)
+      cachedDriveFolderId = createRes.data.id
+      config.driveFolderId = createRes.data.id
+      return createRes.data.id
+    }
+  } catch (err: any) {
+    console.warn('[Google Drive] Impossibile risolvere cartella:', err?.message || err)
+  }
+
+  return null
+}
+
 export async function uploadAttachment(
   file: Express.Multer.File
 ): Promise<UploadedAttachment> {
   const drive = getDriveClient()
 
-  if (drive && config.driveFolderId) {
+  if (drive) {
     try {
+      const folderId = await resolveDriveFolderId(drive)
+      const parents = folderId ? [folderId] : undefined
+
       const response = await drive.files.create({
         requestBody: {
           name: file.originalname,
-          parents: [config.driveFolderId],
+          parents,
           description: 'Allegato caricato tramite MemoTralci PWA',
         },
         media: {
@@ -59,8 +114,8 @@ export async function uploadAttachment(
         createdTime: data.createdTime || new Date().toISOString(),
         isLocal: false,
       }
-    } catch (err) {
-      console.error('Errore durante l\'upload su Google Drive, salvataggio in locale...', err)
+    } catch (err: any) {
+      console.error('[Google Drive] Errore upload su Google Drive, salvataggio locale:', err?.message || err)
     }
   }
 
@@ -84,16 +139,21 @@ export async function uploadAttachment(
 export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
   const drive = getDriveClient()
 
-  if (drive && config.driveFolderId) {
+  if (drive) {
     try {
+      const folderId = await resolveDriveFolderId(drive)
+      const q = folderId
+        ? `'${folderId}' in parents and trashed = false and name != 'tasks.json'`
+        : "trashed = false and name != 'tasks.json'"
+
       const response = await drive.files.list({
-        q: `'${config.driveFolderId}' in parents and trashed = false and name != 'tasks.json'`,
+        q,
         fields: 'files(id, name, mimeType, size, webViewLink, webContentLink, thumbnailLink, createdTime)',
         pageSize: 100,
         orderBy: 'createdTime desc',
       })
 
-      return (response.data.files || []).map((f) => ({
+      return (response.data.files || []).map((f: any) => ({
         id: f.id!,
         name: f.name || 'File senza nome',
         mimeType: f.mimeType || 'application/octet-stream',
@@ -104,8 +164,8 @@ export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
         createdTime: f.createdTime || new Date().toISOString(),
         isLocal: false,
       }))
-    } catch (err) {
-      console.error('Errore list file da Google Drive:', err)
+    } catch (err: any) {
+      console.error('[Google Drive] Errore list file da Google Drive:', err?.message || err)
     }
   }
 
@@ -134,12 +194,12 @@ export async function listDriveAttachments(): Promise<UploadedAttachment[]> {
 
 export async function deleteAttachment(fileId: string): Promise<boolean> {
   const drive = getDriveClient()
-  if (drive && !fileId.includes('_') && config.driveFolderId) {
+  if (drive && !fileId.includes('_')) {
     try {
       await drive.files.delete({ fileId })
       return true
-    } catch (err) {
-      console.error('Errore eliminazione file da Google Drive:', err)
+    } catch (err: any) {
+      console.error('[Google Drive] Errore eliminazione file da Google Drive:', err?.message || err)
     }
   }
 
@@ -160,4 +220,3 @@ export function getLocalFilePath(fileId: string): string | null {
   }
   return null
 }
-

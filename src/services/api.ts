@@ -6,9 +6,13 @@ import { localDB } from './db.ts'
 export interface GoogleStatus {
   isOnline: boolean
   isGoogleConfigured: boolean
+  authType?: 'service_account' | 'oauth2' | 'none'
+  credentialType?: 'service_account' | 'oauth_client' | 'none'
   calendarId: string | null
+  resolvedCalendar?: string | null
   driveFolderId: string | null
   serviceAccountConfigured: boolean
+  oauthConnected?: boolean
 }
 
 export const api = {
@@ -21,9 +25,13 @@ export const api = {
       return {
         isOnline: true,
         isGoogleConfigured: Boolean(data.isGoogleConfigured),
+        authType: data.authType,
+        credentialType: data.credentialType,
         calendarId: data.calendarId || null,
+        resolvedCalendar: data.resolvedCalendar || null,
         driveFolderId: data.driveFolderId || null,
         serviceAccountConfigured: Boolean(data.serviceAccountConfigured),
+        oauthConnected: Boolean(data.oauthConnected),
       }
     } catch {
       return {
@@ -33,6 +41,46 @@ export const api = {
         driveFolderId: null,
         serviceAccountConfigured: false,
       }
+    }
+  },
+
+  // Get accessible Google Calendars (e.g. "Segreteria")
+  async getCalendars(): Promise<{
+    calendars: { id: string; summary: string; primary: boolean; accessRole: string }[]
+    resolved?: { id: string; summary: string }
+  }> {
+    try {
+      const res = await fetch('/api/calendars', { signal: AbortSignal.timeout(6000) })
+      if (res.ok) {
+        return res.json()
+      }
+    } catch (err) {
+      console.warn('Errore recupero calendari:', err)
+    }
+    return { calendars: [] }
+  },
+
+  // Get Google OAuth URL
+  async getOAuthUrl(): Promise<string | null> {
+    try {
+      const res = await fetch('/api/auth/google/url')
+      if (res.ok) {
+        const data = await res.json()
+        return data.url
+      }
+    } catch (err) {
+      console.error('Errore getOAuthUrl:', err)
+    }
+    return null
+  },
+
+  // Disconnect OAuth
+  async disconnectGoogle(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/auth/google/disconnect', { method: 'POST' })
+      return res.ok
+    } catch {
+      return false
     }
   },
 

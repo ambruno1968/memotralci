@@ -44,25 +44,127 @@ function writeLocalEvents(events: AppCalendarEvent[]) {
   fs.writeFileSync(EVENTS_FILE, JSON.stringify(events, null, 2))
 }
 
+let cachedCalendarId: string | null = null
+let cachedCalendarSummary: string | null = null
+
+export function getResolvedCalendarInfo() {
+  return {
+    id: cachedCalendarId || config.calendarId || 'Segreteria',
+    summary: cachedCalendarSummary || config.calendarId || 'Segreteria',
+  }
+}
+
+export async function resolveCalendarId(calendar: any): Promise<string> {
+  const configured = (config.calendarId || '').trim()
+
+  // If already a specific full calendar ID (like an email with @ or Google hash ID) and not just 'segreteria'
+  if (configured && configured.includes('@') && configured.toLowerCase() !== 'segreteria') {
+    cachedCalendarId = configured
+    return configured
+  }
+
+  if (cachedCalendarId) {
+    return cachedCalendarId
+  }
+
+  try {
+    const listRes = await calendar.calendarList.list({ maxResults: 100 })
+    const items = listRes.data.items || []
+
+    const targetName = (configured && configured.toLowerCase() !== 'primary'
+      ? configured
+      : 'segreteria'
+    ).toLowerCase()
+
+    // 1. Exact match by summary name (e.g. "Segreteria")
+    const exact = items.find((c: any) => c.summary && c.summary.toLowerCase().trim() === targetName)
+    if (exact && exact.id) {
+      console.log(`[Google Calendar] Trovato calendario "${exact.summary}" -> ID: ${exact.id}`)
+      cachedCalendarId = exact.id
+      cachedCalendarSummary = exact.summary
+      config.calendarId = exact.id
+      return exact.id
+    }
+
+    // 2. Partial match (e.g. contains "segreteria")
+    const partial = items.find((c: any) => c.summary && c.summary.toLowerCase().includes(targetName))
+    if (partial && partial.id) {
+      console.log(`[Google Calendar] Trovato calendario corrispondente "${partial.summary}" -> ID: ${partial.id}`)
+      cachedCalendarId = partial.id
+      cachedCalendarSummary = partial.summary
+      config.calendarId = partial.id
+      return partial.id
+    }
+
+    // 3. Match by ID containing target (e.g. segreteria.cometralcinovara@gmail.com)
+    const emailMatch = items.find((c: any) => c.id && c.id.toLowerCase().includes('segreteria'))
+    if (emailMatch && emailMatch.id) {
+      console.log(`[Google Calendar] Trovato calendario da email "${emailMatch.summary || emailMatch.id}" -> ID: ${emailMatch.id}`)
+      cachedCalendarId = emailMatch.id
+      cachedCalendarSummary = emailMatch.summary || 'Segreteria'
+      config.calendarId = emailMatch.id
+      return emailMatch.id
+    }
+
+    // 4. Primary calendar fallback
+    const primary = items.find((c: any) => c.primary)
+    if (primary && primary.id) {
+      cachedCalendarId = primary.id
+      cachedCalendarSummary = primary.summary || 'Principale'
+      return primary.id
+    }
+
+    if (items.length > 0 && items[0].id) {
+      cachedCalendarId = items[0].id
+      cachedCalendarSummary = items[0].summary
+      return items[0].id
+    }
+  } catch (err: any) {
+    console.warn('[Google Calendar] Impossibile elencare i calendari:', err?.message || err)
+  }
+
+  return configured || 'primary'
+}
+
+export async function listAvailableCalendars(): Promise<
+  { id: string; summary: string; primary: boolean; accessRole: string }[]
+> {
+  const calendar = getCalendarClient()
+  if (!calendar) return []
+  try {
+    const res = await calendar.calendarList.list({ maxResults: 100 })
+    return (res.data.items || []).map((c: any) => ({
+      id: c.id || '',
+      summary: c.summary || '(Nessun nome)',
+      primary: Boolean(c.primary),
+      accessRole: c.accessRole || 'reader',
+    }))
+  } catch (err) {
+    console.error('Errore durante il recupero dei calendari:', err)
+    return []
+  }
+}
+
 export async function listCalendarEvents(
   timeMin?: string,
   timeMax?: string
 ): Promise<AppCalendarEvent[]> {
   const calendar = getCalendarClient()
 
-  if (calendar && config.calendarId) {
+  if (calendar) {
     try {
+      const calId = await resolveCalendarId(calendar)
       const response = await calendar.events.list({
-        calendarId: config.calendarId,
-        timeMin: timeMin || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        timeMax: timeMax || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+        calendarId: calId,
+        timeMin: timeMin || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+        timeMax: timeMax || new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
         singleEvents: true,
         orderBy: 'startTime',
-        maxResults: 250,
+        maxResults: 500,
       })
 
       const items = response.data.items || []
-      return items.map((item) => {
+      const googleEvents: AppCalendarEvent[] = items.map((item: any) => {
         const isAllDay = Boolean(item.start?.date)
         const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
         const end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
@@ -94,8 +196,12 @@ export async function listCalendarEvents(
           googleEventId: item.id || undefined,
         }
       })
-    } catch (err) {
-      console.error('Errore durante la lettura da Google Calendar, fallback locale:', err)
+
+      // Update local storage cache with latest Google events
+      writeLocalEvents(googleEvents)
+      return googleEvents
+    } catch (err: any) {
+      console.error('[Google Calendar] Errore lettura eventi, uso fallback locale:', err?.message || err)
     }
   }
 
@@ -107,8 +213,9 @@ export async function createCalendarEvent(
 ): Promise<AppCalendarEvent> {
   const calendar = getCalendarClient()
 
-  if (calendar && config.calendarId) {
+  if (calendar) {
     try {
+      const calId = await resolveCalendarId(calendar)
       const startProp = eventData.allDay
         ? { date: eventData.start.split('T')[0] }
         : { dateTime: new Date(eventData.start).toISOString() }
@@ -117,7 +224,7 @@ export async function createCalendarEvent(
         : { dateTime: new Date(eventData.end).toISOString() }
 
       const response = await calendar.events.insert({
-        calendarId: config.calendarId,
+        calendarId: calId,
         requestBody: {
           summary: eventData.title,
           description: eventData.description,
@@ -134,7 +241,7 @@ export async function createCalendarEvent(
       })
 
       const item = response.data
-      return {
+      const created: AppCalendarEvent = {
         id: item.id!,
         title: item.summary || eventData.title,
         description: item.description || eventData.description,
@@ -146,8 +253,14 @@ export async function createCalendarEvent(
         attachments: eventData.attachments,
         googleEventId: item.id || undefined,
       }
-    } catch (err) {
-      console.error('Errore creazione evento su Google Calendar, salvataggio locale:', err)
+
+      // Add to local cache
+      const events = readLocalEvents()
+      events.push(created)
+      writeLocalEvents(events)
+      return created
+    } catch (err: any) {
+      console.error('[Google Calendar] Errore creazione evento, salvataggio locale:', err?.message || err)
     }
   }
 
@@ -168,14 +281,16 @@ export async function updateCalendarEvent(
 ): Promise<AppCalendarEvent | null> {
   const calendar = getCalendarClient()
 
-  if (calendar && config.calendarId && !eventId.startsWith('local_')) {
+  if (calendar && !eventId.startsWith('local_')) {
     try {
+      const calId = await resolveCalendarId(calendar)
       const existing = await calendar.events.get({
-        calendarId: config.calendarId,
+        calendarId: calId,
         eventId,
       })
 
-      const isAllDay = eventData.allDay !== undefined ? eventData.allDay : Boolean(existing.data.start?.date)
+      const isAllDay =
+        eventData.allDay !== undefined ? eventData.allDay : Boolean(existing.data.start?.date)
       const startProp = eventData.start
         ? isAllDay
           ? { date: eventData.start.split('T')[0] }
@@ -188,7 +303,7 @@ export async function updateCalendarEvent(
         : existing.data.end
 
       const response = await calendar.events.patch({
-        calendarId: config.calendarId,
+        calendarId: calId,
         eventId,
         requestBody: {
           summary: eventData.title,
@@ -198,7 +313,8 @@ export async function updateCalendarEvent(
           end: endProp,
           extendedProperties: {
             private: {
-              category: eventData.category || existing.data.extendedProperties?.private?.category || 'altro',
+              category:
+                eventData.category || existing.data.extendedProperties?.private?.category || 'altro',
               attachments: JSON.stringify(
                 eventData.attachments !== undefined
                   ? eventData.attachments
@@ -210,7 +326,7 @@ export async function updateCalendarEvent(
       })
 
       const item = response.data
-      return {
+      const updated: AppCalendarEvent = {
         id: item.id!,
         title: item.summary || '',
         description: item.description || '',
@@ -222,8 +338,19 @@ export async function updateCalendarEvent(
         attachments: eventData.attachments,
         googleEventId: item.id || undefined,
       }
-    } catch (err) {
-      console.error('Errore aggiornamento evento Google Calendar:', err)
+
+      // Update in local cache
+      const events = readLocalEvents()
+      const index = events.findIndex((e) => e.id === eventId)
+      if (index >= 0) {
+        events[index] = { ...events[index], ...updated }
+      } else {
+        events.push(updated)
+      }
+      writeLocalEvents(events)
+      return updated
+    } catch (err: any) {
+      console.error('[Google Calendar] Errore aggiornamento evento:', err?.message || err)
     }
   }
 
@@ -242,19 +369,19 @@ export async function updateCalendarEvent(
 export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
   const calendar = getCalendarClient()
 
-  if (calendar && config.calendarId && !eventId.startsWith('local_')) {
+  if (calendar && !eventId.startsWith('local_')) {
     try {
+      const calId = await resolveCalendarId(calendar)
       await calendar.events.delete({
-        calendarId: config.calendarId,
+        calendarId: calId,
         eventId,
       })
-      return true
-    } catch (err) {
-      console.error('Errore eliminazione evento da Google Calendar:', err)
+    } catch (err: any) {
+      console.error('[Google Calendar] Errore eliminazione evento:', err?.message || err)
     }
   }
 
-  // Local fallback
+  // Remove from local cache
   const events = readLocalEvents()
   const filtered = events.filter((e) => e.id !== eventId)
   if (filtered.length !== events.length) {
@@ -264,4 +391,3 @@ export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
 
   return false
 }
-

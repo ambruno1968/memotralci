@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { Readable } from 'stream'
 import { getDriveClient } from './googleClient.js'
-import { config } from './config.js'
+import { resolveDriveFolderId } from './driveService.js'
 
 export interface AppTaskItem {
   id: string
@@ -53,30 +53,34 @@ function writeLocalTasks(tasks: AppTaskItem[]) {
 export async function listTasks(): Promise<AppTaskItem[]> {
   const drive = getDriveClient()
 
-  if (drive && config.driveFolderId) {
+  if (drive) {
     try {
-      // Find tasks.json in Google Drive
-      const searchRes = await drive.files.list({
-        q: `'${config.driveFolderId}' in parents and name = '${TASKS_DRIVE_FILENAME}' and trashed = false`,
-        fields: 'files(id, name)',
-        pageSize: 1,
-      })
-
-      const file = searchRes.data.files?.[0]
-      if (file?.id) {
-        const fileContent = await drive.files.get({
-          fileId: file.id,
-          alt: 'media',
+      const folderId = await resolveDriveFolderId(drive)
+      if (folderId) {
+        const searchRes = await drive.files.list({
+          q: `'${folderId}' in parents and name = '${TASKS_DRIVE_FILENAME}' and trashed = false`,
+          fields: 'files(id, name)',
+          pageSize: 1,
         })
-        const tasks = typeof fileContent.data === 'string' ? JSON.parse(fileContent.data) : fileContent.data
-        if (Array.isArray(tasks)) {
-          // Sync to local cache
-          writeLocalTasks(tasks)
-          return tasks
+
+        const file = searchRes.data.files?.[0]
+        if (file?.id) {
+          const fileContent = await drive.files.get({
+            fileId: file.id,
+            alt: 'media',
+          })
+          const tasks =
+            typeof fileContent.data === 'string'
+              ? JSON.parse(fileContent.data)
+              : fileContent.data
+          if (Array.isArray(tasks)) {
+            writeLocalTasks(tasks)
+            return tasks
+          }
         }
       }
-    } catch (err) {
-      console.error('Errore lettura tasks da Google Drive, uso cache locale:', err)
+    } catch (err: any) {
+      console.error('[Google Drive] Errore lettura tasks da Drive, uso cache locale:', err?.message || err)
     }
   }
 
@@ -84,47 +88,46 @@ export async function listTasks(): Promise<AppTaskItem[]> {
 }
 
 export async function saveTasks(tasks: AppTaskItem[]): Promise<void> {
-  // Always update local cache
   writeLocalTasks(tasks)
 
   const drive = getDriveClient()
-  if (drive && config.driveFolderId) {
+  if (drive) {
     try {
-      const searchRes = await drive.files.list({
-        q: `'${config.driveFolderId}' in parents and name = '${TASKS_DRIVE_FILENAME}' and trashed = false`,
-        fields: 'files(id, name)',
-        pageSize: 1,
-      })
-
-      const file = searchRes.data.files?.[0]
-      const jsonBuffer = Buffer.from(JSON.stringify(tasks, null, 2), 'utf8')
-
-      if (file?.id) {
-        // Update existing file
-        await drive.files.update({
-          fileId: file.id,
-          media: {
-            mimeType: 'application/json',
-            body: Readable.from(jsonBuffer),
-          },
+      const folderId = await resolveDriveFolderId(drive)
+      if (folderId) {
+        const searchRes = await drive.files.list({
+          q: `'${folderId}' in parents and name = '${TASKS_DRIVE_FILENAME}' and trashed = false`,
+          fields: 'files(id, name)',
+          pageSize: 1,
         })
-      } else {
-        // Create new tasks.json file in the Google Drive folder
-        await drive.files.create({
-          requestBody: {
-            name: TASKS_DRIVE_FILENAME,
-            parents: [config.driveFolderId],
-            description: 'Elenco attività MemoTralci PWA sincronizzato',
-          },
-          media: {
-            mimeType: 'application/json',
-            body: Readable.from(jsonBuffer),
-          },
-        })
+
+        const file = searchRes.data.files?.[0]
+        const jsonBuffer = Buffer.from(JSON.stringify(tasks, null, 2), 'utf8')
+
+        if (file?.id) {
+          await drive.files.update({
+            fileId: file.id,
+            media: {
+              mimeType: 'application/json',
+              body: Readable.from(jsonBuffer),
+            },
+          })
+        } else {
+          await drive.files.create({
+            requestBody: {
+              name: TASKS_DRIVE_FILENAME,
+              parents: [folderId],
+              description: 'Elenco attività MemoTralci PWA sincronizzato',
+            },
+            media: {
+              mimeType: 'application/json',
+              body: Readable.from(jsonBuffer),
+            },
+          })
+        }
       }
-    } catch (err) {
-      console.error('Errore salvataggio tasks su Google Drive:', err)
+    } catch (err: any) {
+      console.error('[Google Drive] Errore salvataggio tasks su Google Drive:', err?.message || err)
     }
   }
 }
-

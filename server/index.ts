@@ -5,10 +5,19 @@ import path from 'path'
 import fs from 'fs'
 import { config, reloadConfig } from './config.js'
 import {
+  inspectCredentials,
+  isOAuthConnected,
+  getOAuthAuthUrl,
+  handleOAuthCallback,
+  disconnectOAuthTokens,
+} from './googleClient.js'
+import {
   listCalendarEvents,
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
+  listAvailableCalendars,
+  getResolvedCalendarInfo,
 } from './calendarService.js'
 import {
   uploadAttachment,
@@ -34,16 +43,77 @@ app.use(express.json({ limit: '10mb' }))
 // Status & Health Check
 app.get('/api/status', async (req, res) => {
   const currentConfig = reloadConfig()
+  const creds = inspectCredentials()
+  const calInfo = getResolvedCalendarInfo()
+
   res.json({
     status: 'ok',
     isGoogleConfigured: currentConfig.isGoogleConfigured,
+    authType: currentConfig.authType,
+    credentialType: creds.type,
     calendarId: currentConfig.calendarId || null,
+    resolvedCalendar: calInfo.summary,
     driveFolderId: currentConfig.driveFolderId || null,
     serviceAccountConfigured: Boolean(
       currentConfig.serviceAccountJson || fs.existsSync(currentConfig.serviceAccountPath)
     ),
+    oauthConnected: isOAuthConnected(),
     serverTime: new Date().toISOString(),
   })
+})
+
+// List available Google Calendars (e.g. to find "Segreteria")
+app.get('/api/calendars', async (req, res) => {
+  try {
+    const calendars = await listAvailableCalendars()
+    res.json({ calendars, resolved: getResolvedCalendarInfo() })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Errore recupero calendari' })
+  }
+})
+
+// OAuth2 Auth URL
+app.get('/api/auth/google/url', (req, res) => {
+  try {
+    const redirectUri = req.query.redirectUri as string | undefined
+    const url = getOAuthAuthUrl(redirectUri)
+    if (!url) {
+      return res.status(400).json({
+        error: 'Client OAuth non configurato o credenziali non di tipo OAuth Web Client.',
+      })
+    }
+    res.json({ url })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// OAuth2 Callback
+app.get('/api/auth/google/callback', async (req, res) => {
+  try {
+    const code = req.query.code as string
+    if (!code) {
+      return res.status(400).send('Codice autorizzazione mancante.')
+    }
+    await handleOAuthCallback(code)
+    reloadConfig()
+    // Redirect back to client app
+    res.redirect('http://localhost:5173/?google_connected=true')
+  } catch (err: any) {
+    console.error('Errore callback OAuth Google:', err)
+    res.status(500).send(`Errore autorizzazione Google: ${err.message}`)
+  }
+})
+
+// OAuth2 Disconnect
+app.post('/api/auth/google/disconnect', (req, res) => {
+  try {
+    disconnectOAuthTokens()
+    reloadConfig()
+    res.json({ success: true, message: 'Disconnesso da Google' })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // Update Configuration from UI
