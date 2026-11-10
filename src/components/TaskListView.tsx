@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import confetti from 'canvas-confetti'
 import {
   CheckSquare,
@@ -15,6 +15,7 @@ import type { AppTaskItem } from '../types/task.ts'
 import { PRIORITY_CONFIG } from '../types/task.ts'
 import type { EventAttachment } from '../types/event.ts'
 import { formatRelativeDate, isToday } from '../utils/date.ts'
+import { categoryService, type AppCategoryItem } from '../services/categoryService.ts'
 
 interface TaskListViewProps {
   tasks: AppTaskItem[]
@@ -36,8 +37,14 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
 }) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'todo' | 'completed'>('todo')
   const [filterPriority, setFilterPriority] = useState<string>('all')
+  const [filterCategory, setFilterCategory] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [quickTitle, setQuickTitle] = useState('')
+  const [categories, setCategories] = useState<AppCategoryItem[]>(categoryService.getCategories())
+
+  useEffect(() => {
+    return categoryService.subscribe(setCategories)
+  }, [])
 
   function handleCheckTask(task: AppTaskItem, e: React.MouseEvent) {
     e.stopPropagation()
@@ -63,6 +70,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
     if (filterStatus === 'todo' && t.completed) return false
     if (filterStatus === 'completed' && !t.completed) return false
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false
+    if (filterCategory !== 'all' && (t.category || 'lavoro') !== filterCategory) return false
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
@@ -166,13 +174,13 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
           </button>
         </div>
 
-        {/* Priority & Search */}
-        <div className="flex items-center space-x-2">
+        {/* Priority, Category & Search */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Priority filter */}
           <select
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
           >
             <option value="all">Tutte le priorità</option>
             <option value="urgente">🔥 Urgente</option>
@@ -181,8 +189,22 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             <option value="bassa">▫️ Bassa</option>
           </select>
 
+          {/* Category filter */}
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
+          >
+            <option value="all">Tutte le categorie</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+
           {/* Search box */}
-          <div className="relative flex-1 sm:w-52">
+          <div className="relative flex-1 min-w-[140px] sm:w-48">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
             <input
               type="text"
@@ -266,6 +288,20 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                       >
                         {pConf.label}
                       </span>
+
+                      {/* Category Badge */}
+                      {(() => {
+                        const cat = task.category || 'lavoro'
+                        const catConf = categoryService.getCategoryStyle(cat)
+                        return (
+                          <span
+                            className={`flex items-center space-x-1 text-[10px] font-bold px-2.5 py-0.5 rounded-lg border ${catConf.bg} ${catConf.text} ${catConf.border}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${catConf.dot}`} />
+                            <span className="truncate max-w-[120px]">{catConf.label}</span>
+                          </span>
+                        )
+                      })()}
 
                       {/* Due Date */}
                       {task.dueDate && (

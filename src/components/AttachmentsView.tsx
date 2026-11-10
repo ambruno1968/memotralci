@@ -98,13 +98,26 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
         <div
           onDragOver={(e) => {
             e.preventDefault()
+            e.stopPropagation()
             setDragActive(true)
           }}
-          onDragLeave={() => setDragActive(false)}
+          onDragEnter={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setDragActive(true)
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setDragActive(false)
+          }}
           onDrop={(e) => {
             e.preventDefault()
+            e.stopPropagation()
             setDragActive(false)
-            handleFiles(e.dataTransfer.files)
+            if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+              handleFiles(e.dataTransfer.files)
+            }
           }}
           className={`relative z-10 border-2 border-dashed rounded-2xl p-4 text-center transition ${
             dragActive

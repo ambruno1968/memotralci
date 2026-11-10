@@ -1,7 +1,7 @@
 import type { EventAttachment } from './event.ts'
 
 export type TaskPriority = 'bassa' | 'media' | 'alta' | 'urgente'
-export type TaskCategory = 'lavoro' | 'personale' | 'spesa' | 'progetto' | 'altro'
+export type TaskCategory = string
 
 export interface SubtaskItem {
   id: string

@@ -21,6 +21,7 @@ import type { EventAttachment } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { getFileTypeCategory } from '../utils/file.ts'
 import { AudioRecorder } from './AudioRecorder.tsx'
+import { CategoryPicker } from './CategoryPicker.tsx'
 
 interface TaskModalProps {
   task?: AppTaskItem | null
@@ -45,13 +46,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [description, setDescription] = useState(task?.description || '')
   const [dueDate, setDueDate] = useState(task?.dueDate || '')
   const [priority, setPriority] = useState<TaskPriority>(task?.priority || 'media')
-  const [category] = useState<TaskCategory>(task?.category || 'lavoro')
+  const [category, setCategory] = useState<TaskCategory>(task?.category || 'lavoro')
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>(
     task?.subtasks || []
   )
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [attachments, setAttachments] = useState<EventAttachment[]>(task?.attachments || [])
   const [isUploading, setIsUploading] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showAudioRecorder, setShowAudioRecorder] = useState(false)
 
@@ -205,7 +207,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Priorità
               </label>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
                 {(['bassa', 'media', 'alta', 'urgente'] as TaskPriority[]).map((p) => {
                   const conf = PRIORITY_CONFIG[p]
                   const isSelected = priority === p
@@ -214,7 +216,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       key={p}
                       type="button"
                       onClick={() => setPriority(p)}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-black uppercase tracking-wider border transition ${
+                      className={`py-2 px-0.5 sm:px-1 text-center rounded-xl text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-normal border transition flex items-center justify-center whitespace-nowrap overflow-hidden ${
                         isSelected
                           ? `${conf.badge} ring-2 ring-emerald-500 shadow-xs border-transparent`
                           : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
@@ -242,6 +244,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Categoria Gestibile */}
+          <CategoryPicker value={category} onChange={setCategory} />
 
           {/* Descrizione / Note */}
           <div>
@@ -359,12 +364,41 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </div>
             )}
 
-            <label className="relative border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-emerald-500 rounded-2xl p-4 text-center transition cursor-pointer flex flex-col items-center justify-center bg-slate-50/60 dark:bg-slate-800/40">
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragActive(true)
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragActive(true)
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragActive(false)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragActive(false)
+                if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+                  handleFileUpload(e.dataTransfer.files)
+                }
+              }}
+              className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition cursor-pointer flex flex-col items-center justify-center ${
+                dragActive
+                  ? 'border-emerald-500 bg-emerald-500/15 dark:bg-emerald-500/20 ring-2 ring-emerald-400/50'
+                  : 'border-slate-300 dark:border-slate-700 hover:border-emerald-500 bg-slate-50/60 dark:bg-slate-800/40'
+              }`}
+            >
               <input
                 type="file"
                 multiple
                 onChange={(e) => handleFileUpload(e.target.files)}
-                className="sr-only"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 disabled={isUploading}
               />
               {isUploading ? (
@@ -373,12 +407,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <span>Caricamento allegati in corso...</span>
                 </div>
               ) : (
-                <div className="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <Upload className="w-4 h-4 text-emerald-600" />
-                  <span>Carica ricevute, preventivi, foto o PDF su Google Drive</span>
+                <div className="flex flex-col items-center justify-center space-y-1">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <Upload className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Trascina qui i file o clicca per caricare</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+                    Supporta ricevute, foto, PDF e documenti (Google Drive)
+                  </span>
                 </div>
               )}
-            </label>
+            </div>
 
             {attachments.length > 0 && (
               <div className="mt-2.5 space-y-1.5">

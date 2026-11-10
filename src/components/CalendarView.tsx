@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,8 +13,8 @@ import {
   Download,
   Sparkles,
 } from 'lucide-react'
-import type { AppCalendarEvent, EventCategory } from '../types/event.ts'
-import { CATEGORY_COLORS } from '../types/event.ts'
+import type { AppCalendarEvent } from '../types/event.ts'
+import { categoryService, type AppCategoryItem } from '../services/categoryService.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import { exportEventsToIcs } from '../utils/ics.ts'
 import {
@@ -53,6 +53,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [mode, setMode] = useState<CalendarMode>('month')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [categories, setCategories] = useState<AppCategoryItem[]>(categoryService.getCategories())
+
+  useEffect(() => {
+    return categoryService.subscribe(setCategories)
+  }, [])
 
   // Navigation
   function handlePrev() {
@@ -242,14 +247,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           >
             Tutti ({events.length})
           </button>
-          {(Object.keys(CATEGORY_COLORS) as EventCategory[]).map((cat) => {
-            const conf = CATEGORY_COLORS[cat]
-            const isSelected = selectedCategory === cat
-            const count = events.filter((e) => e.category === cat).length
+          {categories.map((catItem) => {
+            const conf = categoryService.getCategoryStyle(catItem.id)
+            const isSelected = selectedCategory === catItem.id
+            const count = events.filter((e) => e.category === catItem.id).length
             return (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(isSelected ? 'all' : cat)}
+                key={catItem.id}
+                onClick={() => setSelectedCategory(isSelected ? 'all' : catItem.id)}
                 className={`flex items-center space-x-1.5 px-3 py-1 rounded-xl text-xs font-black whitespace-nowrap border transition cursor-pointer ${
                   isSelected
                     ? `${conf.bg} ${conf.text} ${conf.border} ring-2 ring-indigo-500 shadow-sm`
@@ -257,7 +262,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 }`}
               >
                 <span className={`w-2.5 h-2.5 rounded-full ${conf.dot} ring-2 ring-white/50`} />
-                <span>{conf.label}</span>
+                <span>{catItem.label}</span>
                 {count > 0 && <span className="opacity-75 text-[10px]">({count})</span>}
               </button>
             )
@@ -334,7 +339,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <div className="flex-1 space-y-1.5 overflow-hidden">
                     {dayEvents.slice(0, 3).map((evt) => {
                       const cat = evt.category || 'lavoro'
-                      const conf = CATEGORY_COLORS[cat]
+                      const conf = categoryService.getCategoryStyle(cat)
                       const hasAttachments = Boolean(evt.attachments && evt.attachments.length > 0)
 
                       return (
@@ -428,7 +433,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   >
                     {dayEvents.map((evt) => {
                       const cat = evt.category || 'lavoro'
-                      const conf = CATEGORY_COLORS[cat]
+                      const conf = categoryService.getCategoryStyle(cat)
                       return (
                         <div
                           key={evt.id}
@@ -496,7 +501,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           ) : (
             filteredEvents.map((evt) => {
               const cat = evt.category || 'lavoro'
-              const conf = CATEGORY_COLORS[cat]
+              const conf = categoryService.getCategoryStyle(cat)
               const hasAttachments = Boolean(evt.attachments && evt.attachments.length > 0)
 
               return (

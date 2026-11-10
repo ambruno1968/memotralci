@@ -33,6 +33,35 @@ export function isRealAttachment(f: { name?: string; mimeType?: string }): boole
   return true
 }
 
+// Gestione eliminazioni definitive (Tombstones) per prevenire la ricomparsa dei task eliminati
+const DELETED_TASKS_KEY = 'memotralci_deleted_tasks'
+
+function getDeletedTaskIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_TASKS_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function markTaskAsDeleted(taskId: string) {
+  try {
+    const set = getDeletedTaskIds()
+    set.add(taskId)
+    const arr = Array.from(set).slice(-300)
+    localStorage.setItem(DELETED_TASKS_KEY, JSON.stringify(arr))
+  } catch {}
+}
+
+function unmarkTaskAsDeleted(taskId: string) {
+  try {
+    const set = getDeletedTaskIds()
+    set.delete(taskId)
+    localStorage.setItem(DELETED_TASKS_KEY, JSON.stringify(Array.from(set)))
+  } catch {}
+}
+
 export const api = {
   // Check Google status (Direct Client-Side or Backend Fallback)
   async getStatus(): Promise<GoogleStatus> {
@@ -292,29 +321,34 @@ export const api = {
 
   // Tasks - Archiviazione Cose da Fare nella cartella Drive (sottocartella "Archivio_Task")
   async getTasks(): Promise<AppTaskItem[]> {
-    const localTasks = await localDB.getAllTasks()
+    const deletedIds = getDeletedTaskIds()
+    const rawLocalTasks = await localDB.getAllTasks()
+    const localTasks = rawLocalTasks.filter((t) => !deletedIds.has(t.id))
+
+    // Se ci sono task cancellati ancora in localDB, rimuovili
+    if (rawLocalTasks.length !== localTasks.length) {
+      await localDB.saveTasks(localTasks)
+    }
 
     // 1. Direct Client-Side Google Drive Task Archive
     if (googleClientSide.isConnected()) {
       try {
-        const driveTasks = await googleClientSide.getDriveTasks()
-        if (driveTasks && driveTasks.length > 0) {
+        const rawDriveTasks = await googleClientSide.getDriveTasks()
+        if (Array.isArray(rawDriveTasks)) {
+          // Filtra via tassativamente qualsiasi task eliminato
+          const driveTasks = rawDriveTasks.filter((t) => !deletedIds.has(t.id))
           const driveMap = new Map(driveTasks.map((t) => [t.id, t]))
           const merged: AppTaskItem[] = [...driveTasks]
 
-          // Unisci task locali non ancora presenti su Drive
+          // Unisci solo task locali NON eliminati che non sono ancora finiti su Drive
           for (const lt of localTasks) {
-            if (!driveMap.has(lt.id)) {
+            if (!driveMap.has(lt.id) && !deletedIds.has(lt.id)) {
               merged.push(lt)
             }
           }
 
           await localDB.saveTasks(merged)
           return merged
-        } else if (localTasks.length > 0) {
-          // Se su Drive non c'è ancora nulla, carica i task locali nell'archivio Drive
-          await googleClientSide.saveDriveTasks(localTasks)
-          return localTasks
         }
       } catch (err) {
         console.warn('[Archivio Drive] Errore lettura task da Drive, uso database locale:', err)
@@ -325,9 +359,10 @@ export const api = {
     try {
       const res = await fetch('/api/tasks', { signal: AbortSignal.timeout(3000) })
       if (res.ok) {
-        const tasks: AppTaskItem[] = await res.json()
-        await localDB.saveTasks(tasks)
-        return tasks
+        const rawServerTasks: AppTaskItem[] = await res.json()
+        const serverTasks = rawServerTasks.filter((t) => !deletedIds.has(t.id))
+        await localDB.saveTasks(serverTasks)
+        return serverTasks
       }
     } catch {
       // Fallback
@@ -344,6 +379,7 @@ export const api = {
       updatedAt: new Date().toISOString(),
     }
 
+    unmarkTaskAsDeleted(finalTask.id)
     await localDB.saveTask(finalTask)
     const allTasks = await localDB.getAllTasks()
 
@@ -370,6 +406,7 @@ export const api = {
   async saveTask(task: AppTaskItem): Promise<AppTaskItem> {
     const finalTask = { ...task, updatedAt: new Date().toISOString() }
 
+    unmarkTaskAsDeleted(finalTask.id)
     await localDB.saveTask(finalTask)
     const allTasks = await localDB.getAllTasks()
 
@@ -394,8 +431,10 @@ export const api = {
   },
 
   async deleteTask(taskId: string): Promise<boolean> {
+    markTaskAsDeleted(taskId)
     await localDB.deleteTask(taskId)
-    const remainingTasks = await localDB.getAllTasks()
+    const remainingTasks = (await localDB.getAllTasks()).filter((t) => t.id !== taskId && !getDeletedTaskIds().has(t.id))
+    await localDB.saveTasks(remainingTasks)
 
     if (googleClientSide.isConnected()) {
       try {

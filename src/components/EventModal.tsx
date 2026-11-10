@@ -15,10 +15,10 @@ import {
   Music,
 } from 'lucide-react'
 import type { AppCalendarEvent, EventCategory, EventAttachment } from '../types/event.ts'
-import { CATEGORY_COLORS } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { formatFileSize, getFileTypeCategory } from '../utils/file.ts'
 import { AudioRecorder } from './AudioRecorder.tsx'
+import { CategoryPicker } from './CategoryPicker.tsx'
 
 interface EventModalProps {
   event?: AppCalendarEvent | null
@@ -196,32 +196,7 @@ export const EventModal: React.FC<EventModalProps> = ({
           </div>
 
           {/* Categorie */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-              Categoria
-            </label>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {(Object.keys(CATEGORY_COLORS) as EventCategory[]).map((cat) => {
-                const conf = CATEGORY_COLORS[cat]
-                const isSelected = category === cat
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl text-xs font-bold border transition ${
-                      isSelected
-                        ? `${conf.bg} ${conf.text} ${conf.border} ring-2 ring-indigo-500 shadow-xs font-black`
-                        : 'bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${conf.dot}`} />
-                    <span className="truncate">{conf.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          <CategoryPicker value={category} onChange={setCategory} />
 
           {/* Tutto il giorno toggle */}
           <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
@@ -342,13 +317,26 @@ export const EventModal: React.FC<EventModalProps> = ({
             <div
               onDragOver={(e) => {
                 e.preventDefault()
+                e.stopPropagation()
                 setDragActive(true)
               }}
-              onDragLeave={() => setDragActive(false)}
+              onDragEnter={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragActive(true)
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragActive(false)
+              }}
               onDrop={(e) => {
                 e.preventDefault()
+                e.stopPropagation()
                 setDragActive(false)
-                handleFileUpload(e.dataTransfer.files)
+                if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+                  handleFileUpload(e.dataTransfer.files)
+                }
               }}
               className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition cursor-pointer ${
                 dragActive

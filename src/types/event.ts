@@ -1,4 +1,4 @@
-export type EventCategory = 'lavoro' | 'personale' | 'riunione' | 'urgente' | 'spesa' | 'altro'
+export type EventCategory = string
 
 export interface EventAttachment {
   id: string
