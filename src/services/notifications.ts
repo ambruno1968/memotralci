@@ -25,8 +25,8 @@ export const notificationService = {
     if (!this.isSupported() || Notification.permission !== 'granted') return
     try {
       new Notification(title, {
-        icon: '/icon-192.png',
-        badge: '/favicon.svg',
+        icon: 'icon-192.png',
+        badge: 'favicon.svg',
         ...options,
       })
     } catch (e) {

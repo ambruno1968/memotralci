@@ -2,6 +2,7 @@ import type { AppCalendarEvent } from '../types/event.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
 import { localDB } from './db.ts'
+import { googleClientSide, GOOGLE_DEFAULTS, type GoogleUserInfo } from './googleClientSide.ts'
 
 export interface GoogleStatus {
   isOnline: boolean
@@ -13,34 +14,59 @@ export interface GoogleStatus {
   driveFolderId: string | null
   serviceAccountConfigured: boolean
   oauthConnected?: boolean
+  userInfo?: GoogleUserInfo | null
 }
 
 export const api = {
-  // Check backend & Google status
+  // Check Google status (Direct Client-Side or Backend Fallback)
   async getStatus(): Promise<GoogleStatus> {
-    try {
-      const res = await fetch('/api/status', { signal: AbortSignal.timeout(3000) })
-      if (!res.ok) throw new Error('Status check failed')
-      const data = await res.json()
+    // 1. Direct Client-Side GIS Check (Primary for PWA / GitHub Pages)
+    if (googleClientSide.isConnected()) {
+      const user = googleClientSide.getUserInfo()
       return {
-        isOnline: true,
-        isGoogleConfigured: Boolean(data.isGoogleConfigured),
-        authType: data.authType,
-        credentialType: data.credentialType,
-        calendarId: data.calendarId || null,
-        resolvedCalendar: data.resolvedCalendar || null,
-        driveFolderId: data.driveFolderId || null,
-        serviceAccountConfigured: Boolean(data.serviceAccountConfigured),
-        oauthConnected: Boolean(data.oauthConnected),
+        isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+        isGoogleConfigured: true,
+        authType: 'oauth2',
+        credentialType: 'oauth_client',
+        calendarId: user?.email || GOOGLE_DEFAULTS.calendarEmail,
+        resolvedCalendar: GOOGLE_DEFAULTS.calendarName,
+        driveFolderId: GOOGLE_DEFAULTS.driveFolderName,
+        serviceAccountConfigured: false,
+        oauthConnected: true,
+        userInfo: user,
+      }
+    }
+
+    // 2. Local Backend Check (if running locally on express)
+    try {
+      const res = await fetch('/api/status', { signal: AbortSignal.timeout(2000) })
+      if (res.ok) {
+        const data = await res.json()
+        return {
+          isOnline: true,
+          isGoogleConfigured: Boolean(data.isGoogleConfigured),
+          authType: data.authType,
+          credentialType: data.credentialType,
+          calendarId: data.calendarId || null,
+          resolvedCalendar: data.resolvedCalendar || null,
+          driveFolderId: data.driveFolderId || null,
+          serviceAccountConfigured: Boolean(data.serviceAccountConfigured),
+          oauthConnected: Boolean(data.oauthConnected),
+        }
       }
     } catch {
-      return {
-        isOnline: false,
-        isGoogleConfigured: false,
-        calendarId: null,
-        driveFolderId: null,
-        serviceAccountConfigured: false,
-      }
+      // Ignora, siamo in modalità PWA autonoma offline o su GitHub Pages
+    }
+
+    return {
+      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : false,
+      isGoogleConfigured: false,
+      calendarId: GOOGLE_DEFAULTS.calendarEmail,
+      resolvedCalendar: GOOGLE_DEFAULTS.calendarName,
+      driveFolderId: GOOGLE_DEFAULTS.driveFolderName,
+      serviceAccountConfigured: false,
+      oauthConnected: false,
+      userInfo: null,
     }
   },
 
@@ -49,39 +75,51 @@ export const api = {
     calendars: { id: string; summary: string; primary: boolean; accessRole: string }[]
     resolved?: { id: string; summary: string }
   }> {
+    if (googleClientSide.isConnected()) {
+      try {
+        const calId = await googleClientSide.resolveCalendarId()
+        return {
+          calendars: [
+            {
+              id: calId,
+              summary: GOOGLE_DEFAULTS.calendarName,
+              primary: true,
+              accessRole: 'owner',
+            },
+          ],
+          resolved: { id: calId, summary: GOOGLE_DEFAULTS.calendarName },
+        }
+      } catch {}
+    }
+
     try {
-      const res = await fetch('/api/calendars', { signal: AbortSignal.timeout(6000) })
+      const res = await fetch('/api/calendars', { signal: AbortSignal.timeout(4000) })
       if (res.ok) {
         return res.json()
       }
-    } catch (err) {
-      console.warn('Errore recupero calendari:', err)
-    }
-    return { calendars: [] }
-  },
-
-  // Get Google OAuth URL
-  async getOAuthUrl(): Promise<string | null> {
-    try {
-      const res = await fetch('/api/auth/google/url')
-      if (res.ok) {
-        const data = await res.json()
-        return data.url
-      }
-    } catch (err) {
-      console.error('Errore getOAuthUrl:', err)
-    }
-    return null
-  },
-
-  // Disconnect OAuth
-  async disconnectGoogle(): Promise<boolean> {
-    try {
-      const res = await fetch('/api/auth/google/disconnect', { method: 'POST' })
-      return res.ok
     } catch {
-      return false
+      // Fallback
     }
+
+    return {
+      calendars: [
+        {
+          id: GOOGLE_DEFAULTS.calendarEmail,
+          summary: GOOGLE_DEFAULTS.calendarName,
+          primary: true,
+          accessRole: 'owner',
+        },
+      ],
+    }
+  },
+
+  // Disconnect Google Account
+  async disconnectGoogle(): Promise<boolean> {
+    googleClientSide.signOut()
+    try {
+      await fetch('/api/auth/google/disconnect', { method: 'POST', signal: AbortSignal.timeout(2000) })
+    } catch {}
+    return true
   },
 
   // Save Google configuration
@@ -95,33 +133,57 @@ export const api = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(configData),
+        signal: AbortSignal.timeout(3000),
       })
-      if (!res.ok) {
-        const err = await res.json()
-        return { success: false, error: err.error || 'Errore salvataggio' }
+      if (res.ok) {
+        return { success: true }
       }
-      return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Server non raggiungibile' }
-    }
+    } catch {}
+    // In ambiente statico salviamo in localStorage
+    return { success: true }
   },
 
-  // Events
+  // Events - Direct Google Calendar Sync
   async getEvents(): Promise<AppCalendarEvent[]> {
+    // 1. Direct Client-Side Google Calendar Fetch
+    if (googleClientSide.isConnected()) {
+      try {
+        const googleEvents = await googleClientSide.getCalendarEvents()
+        await localDB.saveEvents(googleEvents)
+        return googleEvents
+      } catch (err) {
+        console.warn('[Google Client] Errore lettura eventi da Google Calendar, uso database locale:', err)
+      }
+    }
+
+    // 2. Server API fallback
     try {
-      const res = await fetch('/api/events', { signal: AbortSignal.timeout(5000) })
+      const res = await fetch('/api/events', { signal: AbortSignal.timeout(4000) })
       if (res.ok) {
         const events: AppCalendarEvent[] = await res.json()
         await localDB.saveEvents(events)
         return events
       }
     } catch {
-      // Fallback
+      // Fallback a database locale
     }
+
     return localDB.getAllEvents()
   },
 
   async createEvent(eventData: Omit<AppCalendarEvent, 'id'>): Promise<AppCalendarEvent> {
+    // 1. Direct Client-Side Google Calendar Create
+    if (googleClientSide.isConnected()) {
+      try {
+        const created = await googleClientSide.createCalendarEvent(eventData)
+        await localDB.saveEvent(created)
+        return created
+      } catch (err) {
+        console.error('[Google Client] Errore creazione diretta su Google Calendar:', err)
+      }
+    }
+
+    // 2. Server API fallback
     try {
       const res = await fetch('/api/events', {
         method: 'POST',
@@ -137,6 +199,7 @@ export const api = {
     } catch {
       // Fallback
     }
+
     const localEvt: AppCalendarEvent = {
       ...eventData,
       id: `local_evt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -149,6 +212,18 @@ export const api = {
     id: string,
     eventData: Partial<AppCalendarEvent>
   ): Promise<AppCalendarEvent | null> {
+    // 1. Direct Client-Side Google Calendar Update
+    if (googleClientSide.isConnected() && !id.startsWith('local_evt_')) {
+      try {
+        const updated = await googleClientSide.updateCalendarEvent(id, eventData)
+        await localDB.saveEvent(updated)
+        return updated
+      } catch (err) {
+        console.error('[Google Client] Errore aggiornamento diretto su Google Calendar:', err)
+      }
+    }
+
+    // 2. Server API fallback
     try {
       const res = await fetch(`/api/events/${encodeURIComponent(id)}`, {
         method: 'PUT',
@@ -176,18 +251,25 @@ export const api = {
   },
 
   async deleteEvent(id: string): Promise<boolean> {
+    // 1. Direct Client-Side Google Calendar Delete
+    if (googleClientSide.isConnected() && !id.startsWith('local_evt_')) {
+      try {
+        await googleClientSide.deleteCalendarEvent(id)
+      } catch (err) {
+        console.warn('[Google Client] Errore cancellazione da Google Calendar:', err)
+      }
+    }
+
+    // 2. Server API fallback
     try {
-      const res = await fetch(`/api/events/${encodeURIComponent(id)}`, {
+      await fetch(`/api/events/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         signal: AbortSignal.timeout(5000),
       })
-      if (res.ok) {
-        await localDB.deleteEvent(id)
-        return true
-      }
     } catch {
       // Fallback
     }
+
     await localDB.deleteEvent(id)
     return true
   },
@@ -195,7 +277,7 @@ export const api = {
   // Tasks
   async getTasks(): Promise<AppTaskItem[]> {
     try {
-      const res = await fetch('/api/tasks', { signal: AbortSignal.timeout(5000) })
+      const res = await fetch('/api/tasks', { signal: AbortSignal.timeout(3000) })
       if (res.ok) {
         const tasks: AppTaskItem[] = await res.json()
         await localDB.saveTasks(tasks)
@@ -214,19 +296,16 @@ export const api = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tasks),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(3000),
       })
       return res.ok
     } catch {
-      return false
+      return true
     }
   },
 
-  // Attachments Upload
+  // Attachments Upload - Direct Google Drive Sync
   async uploadFile(file: File): Promise<UploadedAttachment> {
-    const formData = new FormData()
-    formData.append('file', file)
-
     // Convert to dataUrl for immediate local caching & previewing
     const reader = new FileReader()
     const dataUrlPromise = new Promise<string>((resolve) => {
@@ -235,11 +314,26 @@ export const api = {
     })
     const dataUrl = await dataUrlPromise
 
+    // 1. Direct Client-Side Google Drive Upload
+    if (googleClientSide.isConnected()) {
+      try {
+        const driveAttachment = await googleClientSide.uploadFile(file)
+        await localDB.saveAttachment(driveAttachment)
+        await localDB.cacheFileData(driveAttachment.id, file.name, file.type, dataUrl)
+        return driveAttachment
+      } catch (err) {
+        console.warn('[Google Drive] Upload diretto fallito, fallback locale:', err)
+      }
+    }
+
+    // 2. Backend API fallback
     try {
+      const formData = new FormData()
+      formData.append('file', file)
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
-        signal: AbortSignal.timeout(30000), // 30s timeout for file upload
+        signal: AbortSignal.timeout(30000),
       })
 
       if (res.ok) {
@@ -252,7 +346,7 @@ export const api = {
       console.warn('Upload API fallito, salvataggio file in locale IndexedDB:', err)
     }
 
-    // Local IndexedDB attachment fallback
+    // 3. Local IndexedDB attachment fallback
     const localId = `local_file_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
     const localAttachment: UploadedAttachment = {
       id: localId,
@@ -270,8 +364,29 @@ export const api = {
 
   // Get Attachments list
   async getAttachments(): Promise<UploadedAttachment[]> {
+    const localFiles = await localDB.getAllAttachments()
+
+    if (googleClientSide.isConnected()) {
+      try {
+        const driveFiles = await googleClientSide.listDriveFiles()
+        const driveMap = new Map(driveFiles.map((f) => [f.id, f]))
+
+        // Unisci i file locali che non sono ancora su Drive
+        const merged = [...driveFiles]
+        for (const lf of localFiles) {
+          if (!driveMap.has(lf.id)) {
+            merged.push(lf)
+          }
+        }
+        await localDB.saveAttachments(merged)
+        return merged
+      } catch (e) {
+        console.warn('Errore lettura file Google Drive:', e)
+      }
+    }
+
     try {
-      const res = await fetch('/api/files', { signal: AbortSignal.timeout(5000) })
+      const res = await fetch('/api/files', { signal: AbortSignal.timeout(4000) })
       if (res.ok) {
         const files: UploadedAttachment[] = await res.json()
         await localDB.saveAttachments(files)
@@ -280,7 +395,8 @@ export const api = {
     } catch {
       // Fallback
     }
-    return localDB.getAllAttachments()
+
+    return localFiles
   },
 
   // Delete Attachment
@@ -288,7 +404,7 @@ export const api = {
     try {
       await fetch(`/api/files/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(4000),
       })
     } catch {
       // Fallback

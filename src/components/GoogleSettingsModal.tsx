@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import appLogo from '../assets/logo-icon.png'
 import {
   X,
   ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
   FolderOpen,
   Calendar,
-  HelpCircle,
   Download,
   RefreshCw,
-  Check,
   LogIn,
   LogOut,
-  ExternalLink,
+  Upload,
+  Info,
 } from 'lucide-react'
 import { api, type GoogleStatus } from '../services/api.ts'
+import { googleClientSide, GOOGLE_DEFAULTS } from '../services/googleClientSide.ts'
 import { localDB } from '../services/db.ts'
 
 interface GoogleSettingsModalProps {
@@ -29,134 +28,111 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
   onClose,
   onRefreshStatus,
 }) => {
-  const [activeTab, setActiveTab] = useState<'config' | 'guide' | 'backup'>('config')
-  const [calendarId, setCalendarId] = useState(
-    status.calendarId || 'segreteria.cometralcinovara@gmail.com'
-  )
-  const [driveFolderId, setDriveFolderId] = useState(
-    status.driveFolderId || 'allegati memotralci'
-  )
-  const [serviceAccountJson, setServiceAccountJson] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
-    null
-  )
-  const [availableCalendars, setAvailableCalendars] = useState<
-    { id: string; summary: string; primary: boolean }[]
-  >([])
-  const [isLoadingCalendars, setIsLoadingCalendars] = useState(false)
+  const [activeTab, setActiveTab] = useState<'access' | 'backup'>('access')
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncFeedback, setSyncFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  useEffect(() => {
-    if (status.isGoogleConfigured) {
-      loadCalendarsList()
-    }
-  }, [status.isGoogleConfigured])
+  const isConnected = status.isGoogleConfigured || googleClientSide.isConnected()
+  const userInfo = status.userInfo || googleClientSide.getUserInfo()
+  const accountEmail = userInfo?.email || (isConnected ? GOOGLE_DEFAULTS.calendarEmail : 'Non collegato')
 
-  async function loadCalendarsList() {
-    setIsLoadingCalendars(true)
+  async function handleGoogleLogin() {
+    setIsLoggingIn(true)
+    setSyncFeedback(null)
     try {
-      const res = await api.getCalendars()
-      setAvailableCalendars(res.calendars || [])
-    } catch {
-      // Ignora
+      await googleClientSide.signIn()
+      setSyncFeedback({ type: 'ok', text: 'Accesso Google completato con successo! Sincronizzazione in corso...' })
+      onRefreshStatus()
+      setTimeout(() => {
+        setSyncFeedback(null)
+      }, 4000)
+    } catch (err: any) {
+      console.error('Login Google err:', err)
+      setSyncFeedback({
+        type: 'err',
+        text: err?.message || 'Accesso non completato. Riprova selezionando l\'account di Segreteria.',
+      })
     } finally {
-      setIsLoadingCalendars(false)
+      setIsLoggingIn(false)
     }
   }
 
-  async function handleOAuthLogin() {
-    const url = await api.getOAuthUrl()
-    if (url) {
-      window.location.href = url
-    } else {
-      alert(
-        'Impossibile avviare il login Google. Verifica che il file di credenziali sia presente nella cartella del progetto.'
-      )
-    }
-  }
-
-  async function handleOAuthDisconnect() {
-    if (confirm('Vuoi davvero disconnettere l\'account Google?')) {
+  async function handleGoogleDisconnect() {
+    if (confirm('Vuoi davvero scollegare l\'account Google dalla sessione?')) {
       await api.disconnectGoogle()
+      setSyncFeedback({ type: 'ok', text: 'Account Google scollegato.' })
       onRefreshStatus()
+      setTimeout(() => setSyncFeedback(null), 3000)
     }
   }
 
-  async function handleSaveConfig(e: React.FormEvent) {
-    e.preventDefault()
-    setIsSaving(true)
-    setSaveMessage(null)
-
-    const payload: any = {
-      calendarId: calendarId.trim(),
-      driveFolderId: driveFolderId.trim(),
-    }
-    if (serviceAccountJson.trim()) {
-      payload.serviceAccountJson = serviceAccountJson.trim()
-    }
-
-    const res = await api.saveConfig(payload)
-    setIsSaving(false)
-
-    if (res.success) {
-      setSaveMessage({
-        type: 'success',
-        text: 'Configurazione salvata con successo! Verifica della sincronizzazione in corso...',
-      })
-      onRefreshStatus()
-      setServiceAccountJson('')
-    } else {
-      setSaveMessage({
-        type: 'error',
-        text: res.error || 'Errore durante il salvataggio.',
-      })
+  async function handleSyncNow() {
+    setIsSyncing(true)
+    setSyncFeedback(null)
+    try {
+      await onRefreshStatus()
+      setSyncFeedback({ type: 'ok', text: 'Calendario ed allegati sincronizzati con Google!' })
+      setTimeout(() => setSyncFeedback(null), 3500)
+    } catch (err: any) {
+      setSyncFeedback({ type: 'err', text: 'Errore sincronizzazione: ' + (err?.message || 'Riprova') })
+    } finally {
+      setIsSyncing(false)
     }
   }
 
   async function handleExportBackup() {
-    const events = await localDB.getAllEvents()
-    const tasks = await localDB.getAllTasks()
-    const attachments = await localDB.getAllAttachments()
-
-    const backupData = {
-      app: 'MemoTralci',
-      version: '1.0',
-      exportedAt: new Date().toISOString(),
-      events,
-      tasks,
-      attachments,
+    try {
+      const data = await localDB.exportAllData()
+      const json = JSON.stringify(data, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `memotralci_backup_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert('Errore esportazione backup: ' + err.message)
     }
-
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `memotralci_backup_${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
-  const isOAuth = status.credentialType === 'oauth_client'
+  async function handleImportBackup(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (confirm(`Ripristinare il backup del file ${file.name}? I dati attuali verranno aggiornati.`)) {
+        await localDB.importAllData(data)
+        alert('Dati ripristinati con successo!')
+        onRefreshStatus()
+      }
+    } catch (err: any) {
+      alert('Errore lettura file di backup: ' + err.message)
+    } finally {
+      e.target.value = ''
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-2xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl overflow-hidden shadow-md ring-1 ring-teal-500/20 flex-shrink-0 bg-white">
+            <div className="w-10 h-10 rounded-2xl overflow-hidden ring-1 ring-teal-500/20 bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm shrink-0">
               <img src={appLogo} alt="MemoTralci" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Sincronizzazione Google Calendar & Drive
-              </h2>
-              <p className="text-xs text-slate-500">
-                Collegamento bidirezionale con l'account Google Segreteria
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Account Google & Sincronizzazione
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                MemoTralci • Agenda, Note & Allegati
               </p>
             </div>
           </div>
@@ -168,316 +144,229 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Status Pill Strip */}
-        <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                status.isGoogleConfigured ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
-              }`}
-            />
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-              {status.isGoogleConfigured
-                ? `🟢 Connesso: ${status.resolvedCalendar || status.calendarId || 'Segreteria'}`
-                : isOAuth
-                ? '🟡 Credenziali OAuth rilevate: accedi per collegare Segreteria'
-                : '🟡 Modalità Locale / Credenziali Google non ancora attive'}
-            </span>
-          </div>
+        {/* Tab Selector */}
+        <div className="flex border-b border-slate-200 dark:border-slate-800 px-6 pt-2 bg-slate-50/30 dark:bg-slate-900">
           <button
-            onClick={onRefreshStatus}
-            className="flex items-center space-x-1 text-xs text-teal-600 dark:text-teal-400 font-semibold hover:underline"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Ricarica stato</span>
-          </button>
-        </div>
-
-        {/* Tab Buttons */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800 px-6">
-          <button
-            onClick={() => setActiveTab('config')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition ${
-              activeTab === 'config'
-                ? 'border-teal-600 text-teal-600 dark:text-teal-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+            onClick={() => setActiveTab('access')}
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center space-x-2 ${
+              activeTab === 'access'
+                ? 'border-teal-600 text-teal-600 dark:border-teal-400 dark:text-teal-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Configurazione & Accesso
-          </button>
-          <button
-            onClick={() => setActiveTab('guide')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition flex items-center space-x-1.5 ${
-              activeTab === 'guide'
-                ? 'border-teal-600 text-teal-600 dark:text-teal-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <HelpCircle className="w-3.5 h-3.5" />
-            <span>Guida Service Account</span>
+            <ShieldCheck className="w-4 h-4" />
+            <span>Accesso & Calendario</span>
           </button>
           <button
             onClick={() => setActiveTab('backup')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition ${
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center space-x-2 ${
               activeTab === 'backup'
-                ? 'border-teal-600 text-teal-600 dark:text-teal-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-teal-600 text-teal-600 dark:border-teal-400 dark:text-teal-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Backup Dati
+            <Download className="w-4 h-4" />
+            <span>Backup Dati</span>
           </button>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* TAB 1: CONFIGURATION */}
-          {activeTab === 'config' && (
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-5">
+          {syncFeedback && (
+            <div
+              className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center space-x-2 ${
+                syncFeedback.type === 'ok'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+              }`}
+            >
+              {syncFeedback.type === 'ok' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Info className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+              )}
+              <span>{syncFeedback.text}</span>
+            </div>
+          )}
+
+          {activeTab === 'access' && (
             <div className="space-y-5">
-              {/* OAuth Client Detected Alert */}
-              {isOAuth && (
-                <div className="p-4 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-900/60 space-y-3">
-                  <div className="flex items-start space-x-3">
-                    <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400 mt-0.5 shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-bold text-teal-900 dark:text-teal-200">
-                        Credenziali Google Cloud rilevate (memotralci-514312)
-                      </h4>
-                      <p className="text-xs text-teal-800/80 dark:text-teal-300/80 mt-0.5">
-                        Il file caricato è un <strong>ID Client OAuth 2.0</strong>. Per attivare la sincronizzazione bidirezionale con l'account <strong>segreteria.cometralcinovara@gmail.com</strong>:
-                      </p>
-                    </div>
-                  </div>
-
-                  {status.oauthConnected ? (
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center space-x-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        <span>Autenticazione OAuth attiva con Google</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleOAuthDisconnect}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-bold rounded-xl border border-rose-200 transition"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Disconnetti</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={handleOAuthLogin}
-                        className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 transition cursor-pointer"
-                      >
-                        <LogIn className="w-4 h-4" />
-                        <span>Accedi con Google per connettere il Calendario Segreteria</span>
-                      </button>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 text-center">
-                        Oppure crea una chiave Service Account (scheda Guida) per la sincronizzazione 24/7 senza dover fare login.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {saveMessage && (
-                <div
-                  className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center space-x-2 ${
-                    saveMessage.type === 'success'
-                      ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
-                      : 'bg-rose-50 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-                  }`}
-                >
-                  {saveMessage.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                  )}
-                  <span>{saveMessage.text}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleSaveConfig} className="space-y-4">
-                {/* Calendar ID or Name */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Nome o ID Calendario Google (es: Segreteria)
-                    </label>
-                    {status.isGoogleConfigured && (
-                      <button
-                        type="button"
-                        onClick={loadCalendarsList}
-                        disabled={isLoadingCalendars}
-                        className="text-[11px] text-teal-600 dark:text-teal-400 font-bold hover:underline flex items-center space-x-1"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isLoadingCalendars ? 'animate-spin' : ''}`} />
-                        <span>Rileva Calendari</span>
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      value={calendarId}
-                      onChange={(e) => setCalendarId(e.target.value)}
-                      placeholder="es: Segreteria oppure segreteria.cometralcinovara@gmail.com"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Il sistema rileva automaticamente il calendario <strong>"Segreteria"</strong> se condiviso o presente nel tuo account.
-                  </p>
-
-                  {/* Accessible calendars list if found */}
-                  {availableCalendars.length > 0 && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                        Calendari trovati su Google:
-                      </p>
-                      {availableCalendars.map((cal) => (
-                        <div
-                          key={cal.id}
-                          onClick={() => setCalendarId(cal.id)}
-                          className="flex items-center justify-between p-1.5 rounded-lg hover:bg-teal-50 dark:hover:bg-slate-700 transition cursor-pointer text-xs"
-                        >
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {cal.summary} {cal.primary ? '(Principale)' : ''}
-                          </span>
-                          <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
-                            Seleziona
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Drive Folder ID */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                    Nome o ID Cartella Google Drive per gli Allegati
-                  </label>
-                  <div className="relative">
-                    <FolderOpen className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      value={driveFolderId}
-                      onChange={(e) => setDriveFolderId(e.target.value)}
-                      placeholder="es: allegati memotralci oppure ID della cartella Drive"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Se inserisci <strong>allegati memotralci</strong>, la cartella verrà cercata o creata automaticamente su Google Drive.
-                  </p>
-                </div>
-
-                {/* Service Account Key JSON */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                    Aggiorna Chiave Service Account Google (JSON)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={serviceAccountJson}
-                    onChange={(e) => setServiceAccountJson(e.target.value)}
-                    placeholder="Se desideri la sincronizzazione automatica senza login, incolla qui il JSON della Service Account creata su Google Cloud Console..."
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-mono focus:ring-2 focus:ring-teal-500 outline-none resize-none"
-                  />
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 transition cursor-pointer"
-                  >
-                    {isSaving ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
+              {/* Stato Connessione Account */}
+              <div
+                className={`p-5 rounded-2xl border transition-all ${
+                  isConnected
+                    ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60'
+                    : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3.5">
+                    {userInfo?.picture ? (
+                      <img
+                        src={userInfo.picture}
+                        alt="Profilo"
+                        className="w-12 h-12 rounded-full ring-2 ring-emerald-500/30 object-cover shadow-sm"
+                      />
                     ) : (
-                      <Check className="w-4 h-4" />
+                      <div
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg ${
+                          isConnected
+                            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                            : 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
+                        }`}
+                      >
+                        {isConnected ? '✓' : 'G'}
+                      </div>
                     )}
-                    <span>Salva Parametri Sincronizzazione</span>
-                  </button>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          {userInfo?.name || (isConnected ? 'Segreteria Come Tralci' : 'Accesso Google Richiesto')}
+                        </h4>
+                        <span
+                          className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            isConnected
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
+                          }`}
+                        >
+                          {isConnected ? 'Collegato' : 'In attesa'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 font-mono mt-0.5">
+                        {accountEmail}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </form>
+
+                {/* Dettagli configurazione preimpostata */}
+                <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-800/60 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
+                    <Calendar className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Calendario</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        {GOOGLE_DEFAULTS.calendarName}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
+                    <FolderOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Cartella Drive</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        {GOOGLE_DEFAULTS.driveFolderName}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Azioni di Accesso / Sincronizzazione */}
+              <div className="space-y-3">
+                {!isConnected ? (
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={isLoggingIn}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-sm shadow-lg shadow-teal-700/25 flex items-center justify-center space-x-2 transition disabled:opacity-50"
+                  >
+                    {isLoggingIn ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Apertura accesso sicuro Google...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-4 h-4" />
+                        <span>Accedi con Google (Account Segreteria)</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      onClick={handleSyncNow}
+                      disabled={isSyncing}
+                      className="flex-1 py-3 px-4 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md shadow-teal-700/20 flex items-center justify-center space-x-2 transition disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                      <span>{isSyncing ? 'Sincronizzazione in corso...' : 'Sincronizza Adesso'}</span>
+                    </button>
+                    <button
+                      onClick={handleGoogleDisconnect}
+                      className="py-3 px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 font-bold text-xs transition border border-slate-200 dark:border-slate-700 flex items-center justify-center space-x-1.5"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Disconnetti</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-xs space-y-1.5">
+                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                  <ShieldCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span>Sincronizzazione Automatica Bidirezionale</span>
+                </div>
+                <p>
+                  I dati di calendario e allegati sono preimpostati per l'account <strong>segreteria.cometralcinovara@gmail.com</strong>.
+                  Basta effettuare l'accesso una sola volta con il pulsante sopra. La sincronizzazione si aggiorna
+                  automaticamente in tempo reale.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* TAB 2: STEP-BY-STEP GUIDE */}
-          {activeTab === 'guide' && (
-            <div className="space-y-5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              <div className="p-4 rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/60">
-                <h4 className="font-bold text-teal-900 dark:text-teal-200 text-sm mb-1 flex items-center space-x-1.5">
-                  <ShieldCheck className="w-4 h-4 text-teal-600" />
-                  <span>Sincronizzazione Automatica con Service Account</span>
-                </h4>
-                <p className="text-teal-800/80 dark:text-teal-300/80 text-xs">
-                  Con un <strong>Account di Servizio</strong>, MemoTralci si connette a Google Calendar e Google Drive 24/7 in background senza richiedere login da ogni dispositivo.
-                </p>
-              </div>
-
-              {/* Step 1 */}
-              <div className="space-y-1.5 border-l-2 border-teal-500 pl-3">
-                <h5 className="font-bold text-slate-900 dark:text-white text-xs">
-                  1. Nel tuo progetto Google Cloud (memotralci-514312)
-                </h5>
-                <p>
-                  Accedi a <a href="https://console.cloud.google.com/iam-admin/serviceaccounts?project=memotralci-514312" target="_blank" rel="noreferrer" className="text-teal-600 font-semibold underline inline-flex items-center">Account di Servizio <ExternalLink className="w-3 h-3 ml-1" /></a>.
-                </p>
-                <p>
-                  Clicca su <strong>"+ Crea account di servizio"</strong> (es. nome <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">memotralci-sync</code>).
-                </p>
-              </div>
-
-              {/* Step 2 */}
-              <div className="space-y-1.5 border-l-2 border-teal-500 pl-3">
-                <h5 className="font-bold text-slate-900 dark:text-white text-xs">
-                  2. Genera e scarica la chiave JSON
-                </h5>
-                <p>
-                  Clicca sull'account appena creato &gt; scheda <strong>Chiavi</strong> &gt; <strong>Aggiungi chiave &gt; Crea nuova chiave (JSON)</strong>.
-                </p>
-                <p>
-                  Salva il file come <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">service-account.json</code> nella cartella radice del repository oppure incollane il contenuto nella scheda Parametri.
-                </p>
-              </div>
-
-              {/* Step 3 */}
-              <div className="space-y-1.5 border-l-2 border-teal-500 pl-3">
-                <h5 className="font-bold text-slate-900 dark:text-white text-xs">
-                  3. Condividi il Calendario "Segreteria" con l'email del Service Account
-                </h5>
-                <p>
-                  Apri <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="text-teal-600 font-semibold underline inline-flex items-center">Google Calendar <ExternalLink className="w-3 h-3 ml-1" /></a> con l'account <strong>segreteria.cometralcinovara@gmail.com</strong>.
-                </p>
-                <p>
-                  Nelle impostazioni del calendario <strong>Segreteria</strong>, sotto <strong>"Condividi con persone specifiche"</strong>, aggiungi l'email del Service Account e assegna il permesso <strong>"Apportare modifiche agli eventi"</strong>.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: BACKUP */}
           {activeTab === 'backup' && (
             <div className="space-y-4">
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                Puoi esportare in qualsiasi momento tutti gli eventi, le attività e i metadati degli allegati salvati in locale in un unico file JSON di backup.
-              </p>
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-300 mb-1">
+                  Esporta Archivio Locale
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  Scarica una copia di sicurezza completa in formato JSON contenente tutti gli eventi dell'agenda, le
+                  cose da fare e i metadati degli allegati salvati sul dispositivo.
+                </p>
+                <button
+                  onClick={handleExportBackup}
+                  className="py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:opacity-90 transition flex items-center space-x-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Scarica File Backup (JSON)</span>
+                </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={handleExportBackup}
-                className="flex items-center space-x-2 px-4 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold hover:opacity-90 transition cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Scarica Backup Dati (JSON)</span>
-              </button>
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-300 mb-1">
+                  Ripristina Archivio da File
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  Seleziona un file di backup precedentemente scaricato per ripristinare il calendario e le attività.
+                </p>
+                <label className="inline-flex items-center space-x-2 py-2.5 px-4 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition cursor-pointer">
+                  <Upload className="w-4 h-4" />
+                  <span>Seleziona File di Ripristino</span>
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
             </div>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-slate-50/70 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+          <button
+            onClick={onClose}
+            className="py-2 px-5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition"
+          >
+            Chiudi
+          </button>
         </div>
       </div>
     </div>

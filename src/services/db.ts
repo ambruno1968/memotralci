@@ -124,4 +124,44 @@ export const localDB = {
     const db = await getDB()
     return db.get('cachedFiles', id)
   },
+
+  // Export & Import full backup
+  async exportAllData() {
+    const db = await getDB()
+    const events = await db.getAll('events')
+    const tasks = await db.getAll('tasks')
+    const attachments = await db.getAll('attachments')
+    return {
+      version: 1,
+      appName: 'MemoTralci',
+      exportedAt: new Date().toISOString(),
+      events,
+      tasks,
+      attachments,
+    }
+  },
+  async importAllData(data: any) {
+    const db = await getDB()
+    if (data?.events && Array.isArray(data.events)) {
+      const tx = db.transaction('events', 'readwrite')
+      for (const evt of data.events) {
+        await tx.store.put(evt)
+      }
+      await tx.done
+    }
+    if (data?.tasks && Array.isArray(data.tasks)) {
+      const tx = db.transaction('tasks', 'readwrite')
+      for (const t of data.tasks) {
+        await tx.store.put(t)
+      }
+      await tx.done
+    }
+    if (data?.attachments && Array.isArray(data.attachments)) {
+      const tx = db.transaction('attachments', 'readwrite')
+      for (const a of data.attachments) {
+        await tx.store.put(a)
+      }
+      await tx.done
+    }
+  },
 }

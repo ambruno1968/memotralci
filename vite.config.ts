@@ -65,8 +65,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Prefisso cache univoco per isolare il service worker da altre app sullo stesso dominio/porta
-        cacheId: 'memotralci-pwa-v1',
+        // Prefisso cache univoco per isolare e forzare aggiornamento PWA
+        cacheId: 'memotralci-pwa-v2',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
