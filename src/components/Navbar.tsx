@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import appLogo from '../assets/logo-icon.png'
 import { APP_VERSION } from '../config/version.ts'
+import { AboutWikiModal } from './AboutWikiModal.tsx'
 import {
   CalendarDays,
   CheckSquare,
@@ -50,17 +51,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSync,
   isSyncing = false,
 }) => {
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
+
   return (
     <>
       {/* Desktop & Tablet Top Navbar */}
       <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/90 dark:border-slate-800 shadow-sm transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Brand Logo */}
+          {/* Brand Logo con apertura crediti e wiki al click */}
           <div
-            className="flex items-center space-x-3 cursor-pointer group"
-            onClick={() => onSelectView('calendar')}
+            className="flex items-center space-x-3 cursor-pointer group select-none"
+            onClick={() => setIsAboutOpen(true)}
+            title="Clicca per visualizzare logo ingrandito, crediti, versione e piccola wiki"
           >
-            <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-105 transition ring-1 ring-teal-500/30 flex items-center justify-center bg-white dark:bg-slate-800 shrink-0">
+            <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-110 group-active:scale-95 transition ring-2 ring-teal-500/40 flex items-center justify-center bg-white dark:bg-slate-800 shrink-0">
               <img
                 src={appLogo}
                 alt="MemoTralci"
@@ -69,15 +73,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent">
+                <span className="text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent group-hover:opacity-90">
                   MemoTralci
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-teal-100/90 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800/80">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-teal-100/90 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800/80 group-hover:border-teal-400 transition">
                   {APP_VERSION}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block font-medium">
-                Agenda • Calendario • Note
+                Agenda • Calendario • Note • Info & Guida
               </p>
             </div>
           </div>
@@ -268,6 +272,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Modal Info, Crediti, Logo Ingrandito e Piccola Wiki */}
+      <AboutWikiModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+      />
     </>
   )
 }
