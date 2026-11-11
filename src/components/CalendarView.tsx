@@ -78,7 +78,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   // Filter events by category
   const filteredEvents = events.filter((e) => {
-    if (selectedCategory !== 'all' && !normalizeCategories(e).includes(selectedCategory)) return false
+    if (selectedCategory !== 'all') {
+      const evtCats = normalizeCategories(e)
+      if (selectedCategory === 'none') {
+        if (evtCats.length > 0) return false
+      } else {
+        if (!evtCats.includes(selectedCategory)) return false
+      }
+    }
     return true
   })
 
@@ -247,6 +254,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           >
             Tutti ({events.length})
           </button>
+          {(() => {
+            const uncategorizedCount = events.filter((e) => normalizeCategories(e).length === 0).length
+            if (uncategorizedCount === 0) return null
+            const isSelected = selectedCategory === 'none'
+            return (
+              <button
+                onClick={() => setSelectedCategory(isSelected ? 'all' : 'none')}
+                className={`flex items-center space-x-1.5 px-3 py-1 rounded-xl text-xs font-black whitespace-nowrap border transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-slate-700 text-white border-slate-600 ring-2 ring-slate-400 shadow-sm'
+                    : 'bg-white/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-400 ring-2 ring-white/50" />
+                <span>Senza categoria</span>
+                <span className="opacity-75 text-[10px]">({uncategorizedCount})</span>
+              </button>
+            )
+          })()}
           {categories.map((catItem) => {
             const conf = categoryService.getCategoryStyle(catItem.id)
             const isSelected = selectedCategory === catItem.id

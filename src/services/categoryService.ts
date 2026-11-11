@@ -258,11 +258,12 @@ export const categoryService = new CategoryService()
 
 /**
  * Normalizza le categorie di un task o evento in un array di stringhe pulito.
+ * Se non è impostata alcuna categoria, restituisce un array vuoto [] (categoria facoltativa).
  * Supporta sia il formato singolo (es. "prog_vita"), sia una lista separata da virgole,
  * sia un array esplicito `categories: string[]`.
  */
 export function normalizeCategories(item?: { category?: string; categories?: string[] } | null): string[] {
-  if (!item) return ['prog_vita']
+  if (!item) return []
   const result: string[] = []
 
   if (Array.isArray(item.categories)) {
@@ -282,6 +283,6 @@ export function normalizeCategories(item?: { category?: string; categories?: str
     }
   }
 
-  return result.length > 0 ? result : ['prog_vita']
+  return result
 }
 

@@ -140,7 +140,7 @@ export const EventModal: React.FC<EventModalProps> = ({
         end,
         allDay,
         categories,
-        category: categories.join(','),
+        category: categories.length > 0 ? categories.join(',') : undefined,
         attachments,
       }
 

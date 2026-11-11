@@ -157,7 +157,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         dueDate: dueDate || undefined,
         priority,
         categories,
-        category: categories.join(','),
+        category: categories.length > 0 ? categories.join(',') : undefined,
         subtasks,
         attachments,
         calendarEventId: task?.calendarEventId,

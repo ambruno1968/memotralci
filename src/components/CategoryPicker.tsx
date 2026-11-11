@@ -88,8 +88,8 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
         <label className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <Tag className="w-3.5 h-3.5" />
           <span>{label}</span>
-          <span className="text-[10px] font-normal text-slate-400 capitalize">
-            (puoi selezionarne più di una)
+          <span className="text-[10px] font-normal text-slate-400 lowercase">
+            (facoltativa)
           </span>
         </label>
 
