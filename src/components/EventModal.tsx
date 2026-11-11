@@ -30,6 +30,25 @@ interface EventModalProps {
   onPreviewAttachment?: (att: EventAttachment) => void
 }
 
+// Helper per calcolare data e orario locale con minuti arrotondati a multipli di 5
+function getRoundedLocalDatetime(offsetMs = 0): string {
+  const d = new Date(Date.now() + offsetMs)
+  const rawMinutes = d.getMinutes()
+  const roundedMinutes = Math.round(rawMinutes / 5) * 5
+  if (roundedMinutes >= 60) {
+    d.setHours(d.getHours() + 1)
+    d.setMinutes(0)
+  } else {
+    d.setMinutes(roundedMinutes)
+  }
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 export const EventModal: React.FC<EventModalProps> = ({
   event,
   initialDate,
@@ -42,10 +61,10 @@ export const EventModal: React.FC<EventModalProps> = ({
 
   const defaultStart = initialDate
     ? `${initialDate}T09:00`
-    : new Date().toISOString().slice(0, 16)
+    : getRoundedLocalDatetime(0)
   const defaultEnd = initialDate
     ? `${initialDate}T10:00`
-    : new Date(Date.now() + 3600000).toISOString().slice(0, 16)
+    : getRoundedLocalDatetime(3600000)
 
   const [title, setTitle] = useState(event?.title || '')
   const [description, setDescription] = useState(event?.description || '')
@@ -63,6 +82,42 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [showAudioRecorder, setShowAudioRecorder] = useState(false)
+
+  // Gestione cambio orario di inizio con aggiornamento automatico orario di fine (uguale o superiore)
+  function handleStartChange(newStart: string) {
+    setStart(newStart)
+    if (!newStart) return
+
+    // Se l'orario di fine è inferiore al nuovo inizio, aggiornalo per essere uguale o superiore
+    if (!end || end < newStart) {
+      if (allDay) {
+        setEnd(newStart)
+      } else {
+        try {
+          const s = new Date(newStart)
+          const e = new Date(s.getTime() + 3600000)
+          const year = e.getFullYear()
+          const month = String(e.getMonth() + 1).padStart(2, '0')
+          const day = String(e.getDate()).padStart(2, '0')
+          const hours = String(e.getHours()).padStart(2, '0')
+          const rawM = e.getMinutes()
+          const minutes = String(Math.round(rawM / 5) * 5 % 60).padStart(2, '0')
+          setEnd(`${year}-${month}-${day}T${hours}:${minutes}`)
+        } catch {
+          setEnd(newStart)
+        }
+      }
+    }
+  }
+
+  // Gestione cambio orario di fine (garantisce sempre uguale o superiore a inizio)
+  function handleEndChange(newEnd: string) {
+    if (start && newEnd < start) {
+      setEnd(start)
+    } else {
+      setEnd(newEnd)
+    }
+  }
 
   async function handleRemoveAttachment(att: EventAttachment) {
     const ok = window.confirm(
@@ -132,12 +187,13 @@ export const EventModal: React.FC<EventModalProps> = ({
 
     setIsSaving(true)
     try {
+      const finalEnd = !end || end < start ? start : end
       const eventData: Omit<AppCalendarEvent, 'id'> = {
         title: title.trim(),
         description: description.trim(),
         location: location.trim(),
         start,
-        end,
+        end: finalEnd,
         allDay,
         categories,
         category: categories.length > 0 ? categories.join(',') : undefined,
@@ -224,11 +280,15 @@ export const EventModal: React.FC<EventModalProps> = ({
                 onChange={(e) => {
                   setAllDay(e.target.checked)
                   if (e.target.checked) {
-                    setStart(start.slice(0, 10))
-                    setEnd(end.slice(0, 10))
+                    const dStart = start.slice(0, 10)
+                    const dEnd = end.slice(0, 10) >= dStart ? end.slice(0, 10) : dStart
+                    setStart(dStart)
+                    setEnd(dEnd)
                   } else {
-                    setStart(`${start.slice(0, 10)}T09:00`)
-                    setEnd(`${end.slice(0, 10)}T10:00`)
+                    const dStart = start.slice(0, 10)
+                    const dEnd = end.slice(0, 10) >= dStart ? end.slice(0, 10) : dStart
+                    setStart(`${dStart}T09:00`)
+                    setEnd(`${dEnd}T10:00`)
                   }
                 }}
                 className="sr-only peer"
@@ -237,7 +297,7 @@ export const EventModal: React.FC<EventModalProps> = ({
             </label>
           </div>
 
-          {/* Date & Orari */}
+          {/* Date & Orari (passo minuti a 5 min, fine >= inizio) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
@@ -245,9 +305,10 @@ export const EventModal: React.FC<EventModalProps> = ({
               </label>
               <input
                 type={allDay ? 'date' : 'datetime-local'}
+                step={allDay ? undefined : 300}
                 required
                 value={start}
-                onChange={(e) => setStart(e.target.value)}
+                onChange={(e) => handleStartChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -257,9 +318,11 @@ export const EventModal: React.FC<EventModalProps> = ({
               </label>
               <input
                 type={allDay ? 'date' : 'datetime-local'}
+                step={allDay ? undefined : 300}
+                min={start}
                 required
                 value={end}
-                onChange={(e) => setEnd(e.target.value)}
+                onChange={(e) => handleEndChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
