@@ -46,11 +46,40 @@ class GoogleClientSide {
   private cachedCalendarId: string | null = null
   private cachedFolderId: string | null = null
   private cachedTaskFolderId: string | null = null
+  private refreshTimer: any = null
+  private refreshPromise: Promise<string | null> | null = null
 
   constructor() {
     this.cachedCalendarId = localStorage.getItem(STORAGE_KEYS.CALENDAR_ID)
     this.cachedFolderId = localStorage.getItem(STORAGE_KEYS.FOLDER_ID)
     this.cachedTaskFolderId = localStorage.getItem(STORAGE_KEYS.TASK_FOLDER_ID)
+
+    this.setupLifecycleListeners()
+    this.scheduleAutoRefresh()
+  }
+
+  // Monitora visibilità pagina e focus per rinnovare automaticamente il token
+  private setupLifecycleListeners() {
+    if (typeof window === 'undefined') return
+
+    const checkAndRefresh = () => {
+      const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
+      const user = this.getUserInfo()
+      if (user && exp) {
+        const timeUntilExp = Number(exp) - Date.now()
+        // Se mancano meno di 10 minuti o è già scaduto, rinnova silenziosamente
+        if (timeUntilExp < 10 * 60 * 1000) {
+          this.silentRefreshToken().catch(() => {})
+        }
+      }
+    }
+
+    window.addEventListener('focus', checkAndRefresh)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        checkAndRefresh()
+      }
+    })
   }
 
   // Carica script Google Identity Services
@@ -82,20 +111,33 @@ class GoogleClientSide {
     return this.gisPromise
   }
 
-  // Verifica se è presente un token salvato valido
+  // Verifica se è presente un token o una sessione salvata valida
   public isConnected(): boolean {
     const token = this.getToken()
-    return Boolean(token && token.trim().length > 10)
+    if (token && token.trim().length > 10) return true
+
+    // Se abbiamo l'utente memorizzato ma il token è in fase di scadenza, la sessione è attiva
+    const user = this.getUserInfo()
+    if (user && user.email) {
+      this.silentRefreshToken().catch(() => {})
+      return true
+    }
+    return false
   }
 
   public getToken(): string | null {
     try {
       const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
       const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
-      if (exp && Date.now() > Number(exp)) {
-        // Token scaduto
-        this.clearToken()
-        return null
+      if (exp) {
+        const expNum = Number(exp)
+        // Se mancano meno di 5 minuti, avvia il rinnovo in background
+        if (Date.now() > expNum - 5 * 60 * 1000) {
+          this.silentRefreshToken().catch(() => {})
+        }
+        if (Date.now() > expNum) {
+          return null
+        }
       }
       return token
     } catch {
@@ -103,18 +145,60 @@ class GoogleClientSide {
     }
   }
 
+  public async getValidToken(): Promise<string | null> {
+    const current = this.getToken()
+    if (current) return current
+
+    // Se scaduto, tenta il rinnovo silenzioso immediato
+    const user = this.getUserInfo()
+    if (user) {
+      return await this.silentRefreshToken()
+    }
+    return null
+  }
+
   public setToken(token: string, expiresInSeconds: number = 3600) {
     try {
       localStorage.setItem(STORAGE_KEYS.TOKEN, token.trim())
-      const expTime = Date.now() + (expiresInSeconds - 60) * 1000
+      // Scadenza calcolata con margine di sicurezza
+      const expTime = Date.now() + Math.max(300, expiresInSeconds - 60) * 1000
       localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRES, String(expTime))
+      this.scheduleAutoRefresh(expiresInSeconds)
     } catch (e) {
       console.warn('Errore salvataggio token:', e)
     }
   }
 
+  // Programma il rinnovo automatico circa 5 minuti prima della scadenza
+  public scheduleAutoRefresh(expiresInSeconds?: number) {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer)
+      this.refreshTimer = null
+    }
+
+    let delayMs = 50 * 60 * 1000 // Default 50 minuti
+    if (expiresInSeconds && expiresInSeconds > 600) {
+      delayMs = (expiresInSeconds - 300) * 1000
+    } else {
+      const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
+      if (exp) {
+        delayMs = Math.max(30000, Number(exp) - Date.now() - 300000)
+      }
+    }
+
+    this.refreshTimer = setTimeout(() => {
+      this.silentRefreshToken().catch((err) => {
+        console.warn('[Google GIS] Rinnovo schedulato fallito:', err)
+      })
+    }, delayMs)
+  }
+
   public clearToken() {
     try {
+      if (this.refreshTimer) {
+        clearTimeout(this.refreshTimer)
+        this.refreshTimer = null
+      }
       localStorage.removeItem(STORAGE_KEYS.TOKEN)
       localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES)
       localStorage.removeItem(STORAGE_KEYS.USER)
@@ -134,7 +218,107 @@ class GoogleClientSide {
     }
   }
 
-  // Richiesta Token OAuth via GIS Popup
+  // Rinnovo Silenzioso del Token in Background senza popup e senza interruzioni
+  public async silentRefreshToken(): Promise<string | null> {
+    if (this.refreshPromise) return this.refreshPromise
+
+    this.refreshPromise = (async () => {
+      try {
+        await this.loadGis()
+        const user = this.getUserInfo()
+        const oauth2 = (window as any).google?.accounts?.oauth2
+        if (!oauth2) return null
+
+        return await new Promise<string | null>((resolve) => {
+          let resolved = false
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolved = true
+              console.warn('[Google GIS] Timeout rinnovo silenzioso token')
+              resolve(null)
+            }
+          }, 8000)
+
+          try {
+            const client = oauth2.initTokenClient({
+              client_id: GOOGLE_DEFAULTS.clientId,
+              scope: GOOGLE_DEFAULTS.scopes,
+              callback: (resp: any) => {
+                if (resolved) return
+                resolved = true
+                clearTimeout(timeout)
+                if (resp && resp.access_token) {
+                  const token = resp.access_token
+                  const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600
+                  this.setToken(token, expiresIn)
+                  console.info('[Google GIS] Token rinnovato con successo in background!')
+                  resolve(token)
+                } else {
+                  console.warn('[Google GIS] Risposta rinnovo silenzioso non valida:', resp)
+                  resolve(null)
+                }
+              },
+              error_callback: (err: any) => {
+                if (resolved) return
+                resolved = true
+                clearTimeout(timeout)
+                console.warn('[Google GIS] Errore silent refresh:', err)
+                resolve(null)
+              },
+            })
+
+            // Richiesta silenziosa senza prompt all'utente
+            client.requestAccessToken({
+              prompt: '',
+              hint: user?.email || GOOGLE_DEFAULTS.calendarEmail,
+            })
+          } catch (e) {
+            if (!resolved) {
+              resolved = true
+              clearTimeout(timeout)
+              resolve(null)
+            }
+          }
+        })
+      } finally {
+        this.refreshPromise = null
+      }
+    })()
+
+    return this.refreshPromise
+  }
+
+  // Esegue fetch verso le API Google gestendo automaticamente il rinnovo del token su 401
+  private async fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
+    let token = await this.getValidToken()
+    if (!token) {
+      token = this.getToken()
+    }
+
+    const headers = new Headers(init?.headers || {})
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+
+    let res = await fetch(url, { ...init, headers })
+
+    // Se riceviamo 401 Unauthorized, tenta il rinnovo immediato del token e riprova una volta
+    if (res.status === 401) {
+      console.info('[Google API] Ricevuto 401, tentativo di rinnovo immediato del token...')
+      const refreshed = await this.silentRefreshToken()
+      if (refreshed) {
+        headers.set('Authorization', `Bearer ${refreshed}`)
+        res = await fetch(url, { ...init, headers })
+      } else {
+        console.warn('[Google API] Impossibile rinnovare il token. Sessione scaduta.')
+        this.clearToken()
+      }
+    }
+
+    return res
+  }
+
+  // Richiesta Token OAuth via GIS Popup (primo accesso o ri-login esplicito)
   public async signIn(): Promise<{ token: string; user: GoogleUserInfo }> {
     await this.loadGis()
 
@@ -198,13 +382,8 @@ class GoogleClientSide {
   public async resolveCalendarId(): Promise<string> {
     if (this.cachedCalendarId) return this.cachedCalendarId
 
-    const token = this.getToken()
-    if (!token) return 'primary'
-
     try {
-      const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await this.fetchWithAuth('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100')
 
       if (res.ok) {
         const data = await res.json()
@@ -232,9 +411,6 @@ class GoogleClientSide {
   }
 
   public async getCalendarEvents(): Promise<AppCalendarEvent[]> {
-    const token = this.getToken()
-    if (!token) return []
-
     const calId = await this.resolveCalendarId()
     const timeMin = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
     const timeMax = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
@@ -245,14 +421,9 @@ class GoogleClientSide {
       timeMin
     )}&timeMax=${encodeURIComponent(timeMax)}`
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const res = await this.fetchWithAuth(url)
 
     if (!res.ok) {
-      if (res.status === 401) {
-        this.clearToken()
-      }
       throw new Error(`Errore Calendar Google (${res.status}): ${res.statusText}`)
     }
 
@@ -321,10 +492,9 @@ class GoogleClientSide {
       },
     }
 
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+    const res = await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -350,9 +520,6 @@ class GoogleClientSide {
   }
 
   public async updateCalendarEvent(id: string, eventData: Partial<AppCalendarEvent>): Promise<AppCalendarEvent> {
-    const token = this.getToken()
-    if (!token) throw new Error('Account Google non connesso')
-
     const calId = await this.resolveCalendarId()
 
     const patchBody: any = {}
@@ -381,12 +548,11 @@ class GoogleClientSide {
       }
     }
 
-    const res = await fetch(
+    const res = await this.fetchWithAuth(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(patchBody),
@@ -413,15 +579,11 @@ class GoogleClientSide {
   }
 
   public async deleteCalendarEvent(id: string): Promise<boolean> {
-    const token = this.getToken()
-    if (!token) return true
-
     const calId = await this.resolveCalendarId()
-    const res = await fetch(
+    const res = await this.fetchWithAuth(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       }
     )
 
@@ -440,14 +602,10 @@ class GoogleClientSide {
       return GOOGLE_DEFAULTS.driveFolderId
     }
 
-    const token = this.getToken()
-    if (!token) return GOOGLE_DEFAULTS.driveFolderId
-
     try {
       const folderQuery = `name = '${GOOGLE_DEFAULTS.driveFolderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,name)&pageSize=5`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,name)&pageSize=5`
       )
 
       if (res.ok) {
@@ -461,10 +619,9 @@ class GoogleClientSide {
       }
 
       // Se non esiste, crea la cartella su Drive
-      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      const createRes = await this.fetchWithAuth('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -489,9 +646,6 @@ class GoogleClientSide {
   }
 
   public async uploadFile(file: File): Promise<UploadedAttachment> {
-    const token = this.getToken()
-    if (!token) throw new Error('Account Google non connesso')
-
     const folderId = await this.resolveDriveFolderId()
 
     // Preparazione multipart upload nativo
@@ -518,12 +672,11 @@ class GoogleClientSide {
     const endPart = new Blob([closeDelim], { type: 'text/plain' })
     const multipartBody = new Blob([metadataPart, file, endPart])
 
-    const uploadRes = await fetch(
+    const uploadRes = await this.fetchWithAuth(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,webContentLink,createdTime',
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': `multipart/related; boundary=${boundary}`,
         },
         body: multipartBody,
@@ -538,10 +691,9 @@ class GoogleClientSide {
 
     // Rendiamo il file accessibile con link se necessario
     try {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${uploaded.id}/permissions`, {
+      await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${uploaded.id}/permissions`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ role: 'reader', type: 'anyone' }),
@@ -561,19 +713,13 @@ class GoogleClientSide {
   }
 
   public async listDriveFiles(): Promise<UploadedAttachment[]> {
-    const token = this.getToken()
-    if (!token) return []
-
     const folderId = await this.resolveDriveFolderId()
     const query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`
 
-    const res = await fetch(
+    const res = await this.fetchWithAuth(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
         query
-      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime)&pageSize=100&orderBy=createdTime%20desc`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
+      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime)&pageSize=100&orderBy=createdTime%20desc`
     )
 
     if (!res.ok) return []
@@ -625,18 +771,12 @@ class GoogleClientSide {
     }
 
     const parentFolderId = await this.resolveDriveFolderId()
-    const token = this.getToken()
-    if (!token) return parentFolderId
-
     const folderName = 'Archivio_Task'
 
     try {
       const q = `'${parentFolderId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-      const searchRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+      const searchRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`
       )
 
       if (searchRes.ok) {
@@ -650,10 +790,9 @@ class GoogleClientSide {
       }
 
       // Se non esiste, crea la sottocartella dentro la cartella allegati
-      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      const createRes = await this.fetchWithAuth('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -702,9 +841,6 @@ class GoogleClientSide {
     description?: string,
     matchSuffix?: string
   ): Promise<string> {
-    const token = this.getToken()
-    if (!token) return ''
-
     const contentStr = JSON.stringify(data, null, 2)
     const jsonBlob = new Blob([contentStr], { type: 'application/json' })
 
@@ -714,9 +850,8 @@ class GoogleClientSide {
       const q = matchSuffix
         ? `'${folderId}' in parents and trashed = false`
         : `'${folderId}' in parents and name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
-      const searchRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const searchRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=100`
       )
       if (searchRes.ok) {
         const searchData = await searchRes.json()
@@ -747,12 +882,11 @@ class GoogleClientSide {
       const endPart = new Blob([closeDelim], { type: 'text/plain' })
       const multipartBody = new Blob([metadataPart, jsonBlob, endPart])
 
-      const res = await fetch(
+      const res = await this.fetchWithAuth(
         `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&fields=id,name`,
         {
           method: 'PATCH',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': `multipart/related; boundary=${boundary}`,
           },
           body: multipartBody,
@@ -782,12 +916,11 @@ class GoogleClientSide {
       const endPart = new Blob([closeDelim], { type: 'text/plain' })
       const multipartBody = new Blob([metadataPart, jsonBlob, endPart])
 
-      const res = await fetch(
+      const res = await this.fetchWithAuth(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': `multipart/related; boundary=${boundary}`,
           },
           body: multipartBody,
@@ -802,26 +935,21 @@ class GoogleClientSide {
   }
 
   public async getDriveTasks(): Promise<AppTaskItem[]> {
-    const token = this.getToken()
-    if (!token) return []
-
     try {
       const folderId = await this.resolveTaskArchiveFolderId()
 
       // 1. Prova prima a leggere l'indice _tasks_index.json
       const indexQuery = `'${folderId}' in parents and name = '_tasks_index.json' and trashed = false`
-      const indexRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(indexQuery)}&fields=files(id,name)&pageSize=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const indexRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(indexQuery)}&fields=files(id,name)&pageSize=1`
       )
 
       if (indexRes.ok) {
         const indexData = await indexRes.json()
         const indexFile = indexData.files?.[0]
         if (indexFile?.id) {
-          const contentRes = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${indexFile.id}?alt=media`,
-            { headers: { Authorization: `Bearer ${token}` } }
+          const contentRes = await this.fetchWithAuth(
+            `https://www.googleapis.com/drive/v3/files/${indexFile.id}?alt=media`
           )
           if (contentRes.ok) {
             const tasks = await contentRes.json()
@@ -834,9 +962,8 @@ class GoogleClientSide {
 
       // 2. Se l'indice non c'è, leggi i singoli file task presenti nella sottocartella
       const filesQuery = `'${folderId}' in parents and trashed = false and mimeType = 'application/json' and name != '_tasks_index.json'`
-      const filesRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(filesQuery)}&fields=files(id,name)&pageSize=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const filesRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(filesQuery)}&fields=files(id,name)&pageSize=100`
       )
 
       if (filesRes.ok) {
@@ -846,9 +973,8 @@ class GoogleClientSide {
 
         for (const f of files) {
           try {
-            const taskRes = await fetch(
-              `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
-              { headers: { Authorization: `Bearer ${token}` } }
+            const taskRes = await this.fetchWithAuth(
+              `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`
             )
             if (taskRes.ok) {
               const t = await taskRes.json()
@@ -872,9 +998,6 @@ class GoogleClientSide {
   }
 
   public async saveDriveTasks(tasks: AppTaskItem[]): Promise<void> {
-    const token = this.getToken()
-    if (!token) return
-
     try {
       const folderId = await this.resolveTaskArchiveFolderId()
 
@@ -895,11 +1018,10 @@ class GoogleClientSide {
 
       // 3. Elimina eventuali file remoti orfani di task eliminati
       const currentTaskIds = new Set(tasks.map((t) => t.id))
-      const listRes = await fetch(
+      const listRes = await this.fetchWithAuth(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
           `'${folderId}' in parents and trashed = false and name != '_tasks_index.json'`
-        )}&fields=files(id,name)&pageSize=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        )}&fields=files(id,name)&pageSize=100`
       )
       if (listRes.ok) {
         const listData = await listRes.json()
@@ -908,9 +1030,8 @@ class GoogleClientSide {
           const match = f.name?.match(/_([^_]+)\.json$/)
           if (match && !currentTaskIds.has(match[1])) {
             try {
-              await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
+              await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
                 method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` },
               })
             } catch {}
           }
@@ -922,9 +1043,6 @@ class GoogleClientSide {
   }
 
   public async saveDriveTask(task: AppTaskItem, allTasks: AppTaskItem[]): Promise<void> {
-    const token = this.getToken()
-    if (!token) return
-
     try {
       const folderId = await this.resolveTaskArchiveFolderId()
       const fileName = this.getTaskFileName(task)
@@ -943,26 +1061,21 @@ class GoogleClientSide {
   }
 
   public async deleteDriveTask(taskId: string, allTasks: AppTaskItem[]): Promise<boolean> {
-    const token = this.getToken()
-    if (!token) return true
-
     try {
       const folderId = await this.resolveTaskArchiveFolderId()
       // Elimina il file del task
-      const searchRes = await fetch(
+      const searchRes = await this.fetchWithAuth(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
           `'${folderId}' in parents and trashed = false`
-        )}&fields=files(id,name)&pageSize=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        )}&fields=files(id,name)&pageSize=100`
       )
       if (searchRes.ok) {
         const data = await searchRes.json()
         const files: any[] = data.files || []
         const match = files.find((f) => f.name?.endsWith(`_${taskId}.json`))
         if (match?.id) {
-          await fetch(`https://www.googleapis.com/drive/v3/files/${match.id}`, {
+          await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${match.id}`, {
             method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
           })
         }
       }
@@ -978,12 +1091,10 @@ class GoogleClientSide {
    * Elimina fisicamente un file da Google Drive (es. allegato eliminato da un task)
    */
   public async deleteDriveFile(fileId: string): Promise<boolean> {
-    const token = this.getToken()
-    if (!token || !fileId) return false
+    if (!fileId) return false
     try {
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
+      const res = await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       })
       return res.ok || res.status === 404
     } catch (e) {
