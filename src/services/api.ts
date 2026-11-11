@@ -24,6 +24,7 @@ export function isRealAttachment(f: { name?: string; mimeType?: string }): boole
   if (
     n === 'tasks.json' ||
     n === '_tasks_index.json' ||
+    n === '_categories.json' ||
     n.includes('client secret') ||
     n.includes('service-account')
   ) {
@@ -31,6 +32,45 @@ export function isRealAttachment(f: { name?: string; mimeType?: string }): boole
   }
   if (n.startsWith('[') && n.endsWith('.json')) return false
   return true
+}
+
+/**
+ * Pulizia automatica e completa della cache:
+ * - Cancella tutte le cache del CacheStorage (PWA / Service Worker)
+ * - Svuota i file temporanei in IndexedDB
+ * - Pulisce chiavi obsolete da localStorage
+ * - Invalida le cache di identificativi Google Drive e Calendar
+ */
+export async function clearAppCaches(): Promise<void> {
+  // 1. Svuota CacheStorage (PWA / Service Worker)
+  if (typeof window !== 'undefined' && 'caches' in window) {
+    try {
+      const cacheNames = await window.caches.keys()
+      await Promise.all(cacheNames.map((name) => window.caches.delete(name)))
+      console.log(`[Cache Purge] Svuotate ${cacheNames.length} cache PWA / Service Worker.`)
+    } catch (e) {
+      console.warn('[Cache Purge] Errore svuotamento caches:', e)
+    }
+  }
+
+  // 2. Svuota file memorizzati nella cache locale IndexedDB
+  try {
+    await localDB.clearCachedFiles()
+    console.log('[Cache Purge] File temporanei IndexedDB svuotati.')
+  } catch (e) {
+    console.warn('[Cache Purge] Errore svuotamento localDB.clearCachedFiles:', e)
+  }
+
+  // 3. Rimuovi chiavi localStorage obsolete
+  try {
+    const obsolete = ['memotralci_custom_categories', 'memotralci_cached_status']
+    for (const key of obsolete) {
+      localStorage.removeItem(key)
+    }
+  } catch {}
+
+  // 4. Invalida cache ID Google Drive e Calendar
+  googleClientSide.clearCachedIds()
 }
 
 // Gestione eliminazioni definitive (Tombstones) per prevenire la ricomparsa dei task eliminati

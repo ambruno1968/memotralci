@@ -1,22 +1,10 @@
 // src/services/categoryService.ts
 // Gestione dinamica delle Categorie per Eventi e Attività (To-Do)
+// Sincronizzazione automatica bidirezionale con Google Drive (_categories.json)
 
-export type CategoryColorName =
-  | 'indigo'
-  | 'emerald'
-  | 'purple'
-  | 'sky'
-  | 'amber'
-  | 'rose'
-  | 'teal'
-  | 'slate'
-
-export interface AppCategoryItem {
-  id: string
-  label: string
-  color: CategoryColorName
-  isDefault?: boolean
-}
+export type { CategoryColorName, AppCategoryItem } from '../types/category.ts'
+import type { CategoryColorName, AppCategoryItem } from '../types/category.ts'
+import { googleClientSide } from './googleClientSide.ts'
 
 export interface CategoryStyle {
   bg: string
@@ -120,6 +108,10 @@ class CategoryService {
 
   constructor() {
     this.load()
+    // Tenta sincronizzazione rapida all'avvio se Google è connesso
+    if (typeof window !== 'undefined' && googleClientSide.isConnected()) {
+      this.syncWithDrive().catch(() => {})
+    }
   }
 
   private load() {
@@ -135,14 +127,54 @@ class CategoryService {
     } catch {}
     // Inizializzazione con le nuove categorie default
     this.categories = DEFAULT_CATEGORIES.map((c) => ({ ...c }))
-    this.save()
+    this.save(false)
   }
 
-  private save() {
+  private save(syncCloud = true) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.categories))
     } catch {}
     listeners.forEach((l) => l([...this.categories]))
+
+    if (syncCloud && googleClientSide.isConnected()) {
+      googleClientSide.saveDriveCategories(this.categories).catch((e) => {
+        console.warn('[CategoryService] Errore salvataggio automatico categorie su Drive:', e)
+      })
+    }
+  }
+
+  /**
+   * Sincronizza bidirezionalmente le categorie con Google Drive:
+   * Legge _categories.json da Google Drive; se trovato lo adotta come stato cloud e aggiorna la cache locale.
+   * Se non presente su Drive, carica lo stato locale corrente su Drive.
+   */
+  public async syncWithDrive(): Promise<AppCategoryItem[]> {
+    if (!googleClientSide.isConnected()) {
+      return [...this.categories]
+    }
+
+    try {
+      const cloudCats = await googleClientSide.getDriveCategories()
+      if (cloudCats && Array.isArray(cloudCats) && cloudCats.length > 0) {
+        // Validazione minima formato categorie
+        const validCats = cloudCats.filter((c) => c && typeof c.id === 'string' && typeof c.label === 'string')
+        if (validCats.length > 0) {
+          this.categories = validCats
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.categories))
+          } catch {}
+          listeners.forEach((l) => l([...this.categories]))
+          return [...this.categories]
+        }
+      } else if (this.categories.length > 0) {
+        // Su Drive non c'è ancora _categories.json: effettua primo push delle categorie correnti
+        await googleClientSide.saveDriveCategories(this.categories)
+      }
+    } catch (e) {
+      console.warn('[CategoryService] Errore durante syncWithDrive:', e)
+    }
+
+    return [...this.categories]
   }
 
   public subscribe(listener: Listener): () => void {

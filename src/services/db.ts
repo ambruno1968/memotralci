@@ -124,6 +124,10 @@ export const localDB = {
     const db = await getDB()
     return db.get('cachedFiles', id)
   },
+  async clearCachedFiles(): Promise<void> {
+    const db = await getDB()
+    await db.clear('cachedFiles')
+  },
 
   // Export & Import full backup
   async exportAllData() {

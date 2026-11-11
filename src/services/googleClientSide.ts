@@ -5,6 +5,7 @@
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
 import type { AppTaskItem } from '../types/task.ts'
+import type { AppCategoryItem } from '../types/category.ts'
 
 export interface GoogleUserInfo {
   id?: string
@@ -736,6 +737,7 @@ class GoogleClientSide {
       if (
         n === 'tasks.json' ||
         n === '_tasks_index.json' ||
+        n === '_categories.json' ||
         n.includes('client secret') ||
         n.includes('service-account')
       ) {
@@ -1100,6 +1102,68 @@ class GoogleClientSide {
     } catch (e) {
       console.warn('[Google Drive] Errore cancellazione fisica file:', e)
       return false
+    }
+  }
+
+  /**
+   * Resetta la cache degli ID delle cartelle e del calendario (forzando ri-risoluzione pulita)
+   */
+  public clearCachedIds(): void {
+    this.cachedCalendarId = null
+    this.cachedFolderId = null
+    this.cachedTaskFolderId = null
+    try {
+      localStorage.removeItem(STORAGE_KEYS.CALENDAR_ID)
+      localStorage.removeItem(STORAGE_KEYS.FOLDER_ID)
+      localStorage.removeItem(STORAGE_KEYS.TASK_FOLDER_ID)
+    } catch {}
+  }
+
+  /**
+   * Recupera le categorie sincronizzate da Google Drive (_categories.json nella cartella Allegati)
+   */
+  public async getDriveCategories(): Promise<AppCategoryItem[] | null> {
+    try {
+      const folderId = await this.resolveDriveFolderId()
+      const query = `'${folderId}' in parents and name = '_categories.json' and trashed = false`
+      const res = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=1`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const file = data.files?.[0]
+        if (file?.id) {
+          const contentRes = await this.fetchWithAuth(
+            `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`
+          )
+          if (contentRes.ok) {
+            const categories = await contentRes.json()
+            if (Array.isArray(categories) && categories.length > 0) {
+              return categories
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Google Drive Categories] Errore lettura categorie:', e)
+    }
+    return null
+  }
+
+  /**
+   * Salva o aggiorna le categorie nel cloud su Google Drive (_categories.json)
+   */
+  public async saveDriveCategories(categories: AppCategoryItem[]): Promise<void> {
+    try {
+      const folderId = await this.resolveDriveFolderId()
+      await this.uploadOrUpdateJsonFile(
+        folderId,
+        '_categories.json',
+        categories,
+        'Categorie personalizzate MemoTralci (sincronizzate multi-dispositivo)'
+      )
+    } catch (e) {
+      console.warn('[Google Drive Categories] Errore salvataggio categorie:', e)
     }
   }
 }

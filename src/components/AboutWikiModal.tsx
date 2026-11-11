@@ -203,6 +203,10 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="sm:col-span-2 p-2.5 rounded-xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200/70 dark:border-teal-800">
+                  <span className="text-teal-700 dark:text-teal-300 block font-bold uppercase text-[10px]">Sviluppato da</span>
+                  <span className="font-black text-slate-900 dark:text-white text-sm">{APP_CREDITS.developedBy}</span>
+                </div>
                 <div>
                   <span className="text-slate-400 block font-bold uppercase text-[10px]">Applicazione</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{APP_CREDITS.appName}</span>

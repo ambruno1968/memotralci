@@ -13,9 +13,10 @@ import {
   Upload,
   Info,
 } from 'lucide-react'
-import { api, type GoogleStatus } from '../services/api.ts'
+import { api, clearAppCaches, type GoogleStatus } from '../services/api.ts'
 import { googleClientSide, GOOGLE_DEFAULTS } from '../services/googleClientSide.ts'
 import { localDB } from '../services/db.ts'
+import { categoryService } from '../services/categoryService.ts'
 import { APP_CREDITS, APP_VERSION } from '../config/version.ts'
 
 interface GoogleSettingsModalProps {
@@ -43,7 +44,10 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
     setSyncFeedback(null)
     try {
       await googleClientSide.signIn()
-      setSyncFeedback({ type: 'ok', text: 'Accesso Google completato con successo! Sincronizzazione in corso...' })
+      // Pulisce la cache completamente in automatico all'accesso e sincronizza le categorie da Drive
+      await clearAppCaches()
+      await categoryService.syncWithDrive()
+      setSyncFeedback({ type: 'ok', text: 'Accesso Google completato! Cache pulita e categorie sincronizzate.' })
       onRefreshStatus()
       setTimeout(() => {
         setSyncFeedback(null)
@@ -62,7 +66,8 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
   async function handleGoogleDisconnect() {
     if (confirm('Vuoi davvero scollegare l\'account Google dalla sessione?')) {
       await api.disconnectGoogle()
-      setSyncFeedback({ type: 'ok', text: 'Account Google scollegato.' })
+      await clearAppCaches()
+      setSyncFeedback({ type: 'ok', text: 'Account Google scollegato e cache azzerata.' })
       onRefreshStatus()
       setTimeout(() => setSyncFeedback(null), 3000)
     }
@@ -72,8 +77,11 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
     setIsSyncing(true)
     setSyncFeedback(null)
     try {
+      // Pulisce la cache e risincronizza categorie, eventi e task
+      await clearAppCaches()
+      await categoryService.syncWithDrive()
       await onRefreshStatus()
-      setSyncFeedback({ type: 'ok', text: 'Calendario ed allegati sincronizzati con Google!' })
+      setSyncFeedback({ type: 'ok', text: 'Sincronizzazione completata e cache aggiornata!' })
       setTimeout(() => setSyncFeedback(null), 3500)
     } catch (err: any) {
       setSyncFeedback({ type: 'err', text: 'Errore sincronizzazione: ' + (err?.message || 'Riprova') })
@@ -362,6 +370,12 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <div className="sm:col-span-2 p-3 rounded-xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200/70 dark:border-teal-800">
+                    <div className="text-[10px] uppercase font-bold text-teal-700 dark:text-teal-300">Sviluppato da</div>
+                    <div className="font-black text-slate-900 dark:text-white text-sm mt-0.5">
+                      {APP_CREDITS.developedBy}
+                    </div>
+                  </div>
                   <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/50 dark:border-slate-700/50">
                     <div className="text-[10px] uppercase font-bold text-slate-400">Sviluppato per</div>
                     <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">

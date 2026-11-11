@@ -11,7 +11,8 @@ import { PwaInstallBanner } from './components/PwaInstallBanner.tsx'
 import type { AppCalendarEvent } from './types/event.ts'
 import type { AppTaskItem } from './types/task.ts'
 import type { UploadedAttachment } from './types/attachment.ts'
-import { api, type GoogleStatus } from './services/api.ts'
+import { api, clearAppCaches, type GoogleStatus } from './services/api.ts'
+import { categoryService } from './services/categoryService.ts'
 import { notificationService } from './services/notifications.ts'
 import { Loader2, CheckCircle } from 'lucide-react'
 import { APP_VERSION, APP_CREDITS } from './config/version.ts'
@@ -106,16 +107,26 @@ export function App() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncNotice, setSyncNotice] = useState<string | null>(null)
 
-  // Load Data with Bidirectional Sync
-  async function loadAllData(showSyncIndicator = false) {
+  // Load Data with Bidirectional Sync and Category / Cache Refresh
+  async function loadAllData(showSyncIndicator = false, purgeCache = false) {
     if (showSyncIndicator) setIsSyncing(true)
     try {
+      if (purgeCache || showSyncIndicator) {
+        await clearAppCaches()
+        await categoryService.syncWithDrive()
+      }
+
       const [status, fetchedEvents, fetchedTasks, fetchedAttachments] = await Promise.all([
         api.getStatus(),
         api.getEvents(),
         api.getTasks(),
         api.getAttachments(),
       ])
+
+      // Se non avevamo ancora sincronizzato le categorie (es. sync automatico normale), sincronizzale in background se connesso
+      if (!purgeCache && !showSyncIndicator && status.isGoogleConfigured) {
+        categoryService.syncWithDrive().catch(() => {})
+      }
 
       setGoogleStatus(status)
       setEvents(fetchedEvents)
@@ -129,7 +140,7 @@ export function App() {
         const calName = status.resolvedCalendar || status.calendarId || 'Google Calendar'
         setSyncNotice(
           status.isGoogleConfigured
-            ? `Sincronizzato con Google Calendar (${calName})`
+            ? `Sincronizzato con Google Calendar & Drive (${calName})`
             : 'Sincronizzato con archivio locale'
         )
         setTimeout(() => setSyncNotice(null), 3500)
@@ -144,13 +155,20 @@ export function App() {
 
   // Initial load and URL check
   useEffect(() => {
-    loadAllData()
-
     // Check if returned from Google OAuth
     const params = new URLSearchParams(window.location.search)
-    if (params.get('google_connected') === 'true') {
+    const justConnected = params.get('google_connected') === 'true'
+    if (justConnected) {
       window.history.replaceState({}, '', window.location.pathname)
-      loadAllData(true)
+    }
+
+    // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v1_2_5')
+    if (!sessionCacheCleared || justConnected) {
+      sessionStorage.setItem('memotralci_cache_cleared_v1_2_5', 'true')
+      loadAllData(justConnected, true)
+    } else {
+      loadAllData()
     }
   }, [])
 
@@ -178,7 +196,7 @@ export function App() {
   }, [])
 
   async function handleManualSync() {
-    await loadAllData(true)
+    await loadAllData(true, true)
   }
 
   // Event handlers
