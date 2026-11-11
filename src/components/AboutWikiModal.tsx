@@ -120,13 +120,16 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
               </div>
               <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
                 <li>
-                  <strong>Passi di 5 minuti:</strong> quando selezioni l'orario, l'elenco dei minuti avanza a scatti di 5 (00, 05, 10, 15, ecc.).
+                  <strong>Vista Giornaliera (&ldquo;Oggi&rdquo; / &ldquo;Giorno&rdquo;):</strong> cliccando su <em>Oggi</em>, su <em>Giorno</em> o sul numero di una data nel calendario visualizzi solo gli impegni e le attività di quel singolo giorno.
                 </li>
                 <li>
-                  <strong>Orario di fine coerente:</strong> l'orario di fine è vincolato ed è sempre uguale o successivo all'orario di inizio.
+                  <strong>Agenda da Oggi in Poi:</strong> la vista <em>Agenda</em> mostra automaticamente solo gli impegni da oggi in avanti, nascondendo quelli passati.
                 </li>
                 <li>
-                  <strong>Sincronizzazione Google Calendar:</strong> gli eventi si salvano nel calendario <em>Segreteria</em> e rimangono sincronizzati su tutti i dispositivi.
+                  <strong>Condivisione WhatsApp con Logo:</strong> da <em>Giorno</em> o da <em>Agenda</em> clicca su <strong>Condividi</strong> per inviare l'evento (o l'intera giornata) su WhatsApp con formattazione elegante o come locandina PNG con il logo Come Tralci.
+                </li>
+                <li>
+                  <strong>Passi di 5 minuti &amp; Orario coerente:</strong> i minuti avanzano a scatti di 5 e l'orario di fine si adegua sempre a quello di inizio.
                 </li>
               </ul>
             </div>

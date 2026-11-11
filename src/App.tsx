@@ -163,9 +163,9 @@ export function App() {
     }
 
     // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
-    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v1_2_6')
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_0_0')
     if (!sessionCacheCleared || justConnected) {
-      sessionStorage.setItem('memotralci_cache_cleared_v1_2_6', 'true')
+      sessionStorage.setItem('memotralci_cache_cleared_v2_0_0', 'true')
       loadAllData(justConnected, true)
     } else {
       loadAllData()

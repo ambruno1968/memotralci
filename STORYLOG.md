@@ -7,6 +7,18 @@
 
 ---
 
+## [v2.0.0] — 11 Novembre 2026
+### 🚀 Major Release 2.0: Vista Giornaliera (Oggi), Condivisione WhatsApp con Logo e Agenda Futura
+- **Suddivisione Calendario per OGGI / Giorno (`day`):**
+  - Cliccando sul pulsante **"Oggi"** (o sul selettore **"Giorno"**, oppure sul numero di qualsiasi giorno nella griglia mensile/settimanale) si apre la vista dedicata al singolo giorno selezionato, con frecce `<` e `>` per scorrere di giorno in giorno.
+- **Condivisione Eventi da Agenda o da Giorno (WhatsApp + Locandina PNG con Logo):**
+  - Ogni evento nelle viste *Giorno* e *Agenda* (oltre all'intera giornata) dispone del pulsante **Condividi** che apre una scheda elegante con il **Logo Come Tralci**, **Data, Orario e Testo dell'evento**.
+  - Permette l'invio diretto su **WhatsApp** con formattazione elegante, la condivisione/download della **Card grafica PNG con il logo Come Tralci**, o la copia rapida del testo.
+- **Agenda da Oggi in Poi:**
+  - La vista **Agenda** mostra ora esclusivamente gli eventi da oggi in avanti, nascondendo automaticamente gli eventi passati.
+
+---
+
 ## [v1.2.6] — 11 Novembre 2026
 ### 🛠️ Fix Sincronizzazione Categorie Multi-Dispositivo (PC & Smartphone) e Storylog
 - **Risoluzione limite permessi `drive.file` su cartelle preimpostate:** aggiunto fallback automatico per la creazione/aggiornamento di `_categories.json` e dei file JSON su Google Drive qualora la cartella cablata restituisca `404` con lo scope `drive.file`, più ricerca globale del file `_categories.json` ordinata per `modifiedTime desc`.

@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v1.2.6'
+export const APP_VERSION = 'v2.0.0'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '1.2.6',
+  version: '2.0.0',
   releaseDate: '11 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,17 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.0.0',
+    date: '11/11/2026',
+    title: 'Major Release 2.0: Vista Giornaliera (Oggi), Condivisione WhatsApp con Logo e Agenda Futura',
+    type: 'major',
+    changes: [
+      'Nuova Vista Giornaliera ("Giorno" / "Oggi"): cliccando su "Oggi" o su "Giorno" (o sul numero di qualsiasi giorno nel calendario) si apre il programma dettagliato del singolo giorno con eventi e scadenze.',
+      'Condivisione Eventi e Giornata su WhatsApp con Logo: nuovo pannello di condivisione elegante con anteprima grafica, messaggio formattato per WhatsApp e generazione automatica della locandina PNG ad alta risoluzione con il logo Come Tralci, data, orario e testo dell\'evento.',
+      'Agenda Intelligente "Da Oggi in Poi": la vista Agenda mostra esclusivamente gli eventi a partire dalla data odierna in avanti, nascondendo automaticamente gli eventi passati.',
+    ],
+  },
   {
     version: '1.2.6',
     date: '11/11/2026',
