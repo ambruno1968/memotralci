@@ -1,7 +1,7 @@
-// Configurazione Versione e Crediti MemoTralci
+// Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v1.2.5'
+export const APP_VERSION = 'v1.2.6'
 
 export interface AppCredits {
   appName: string
@@ -15,9 +15,17 @@ export interface AppCredits {
   contactEmail: string
 }
 
+export interface StorylogEntry {
+  version: string
+  date: string
+  title: string
+  type: 'major' | 'minor' | 'patch'
+  changes: string[]
+}
+
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '1.2.5',
+  version: '1.2.6',
   releaseDate: '11 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -26,3 +34,111 @@ export const APP_CREDITS: AppCredits = {
   copyright: '© 2026 Come Tralci Novara • Sviluppato da Bruno Astemio (bam@68)',
   contactEmail: 'segreteria.cometralcinovara@gmail.com',
 }
+
+export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '1.2.6',
+    date: '11/11/2026',
+    title: 'Allineamento Categorie Multi-Dispositivo (PC & Smartphone) e Storylog',
+    type: 'patch',
+    changes: [
+      'Risolto conflitto permessi OAuth drive.file sulla cartella Drive con fallback automatico e ricerca globale di _categories.json.',
+      'Doppio canale di sincronizzazione categorie (Google Drive + Metadati Google Calendar) con controllo versione basato su timestamp (updatedAt) e merge intelligente.',
+      'Rimosso vecchio fallback forzato "altro" sugli eventi di Google Calendar e sincronizzato l\'array completo delle categorie.',
+      'Rimosso il pulsante "+ Nuovo Evento" dalla barra superiore per un\'interfaccia più pulita.',
+      'Aggiunto Storylog (storico versioni e modifiche) consultabile direttamente dall\'app e nel repository.',
+    ],
+  },
+  {
+    version: '1.2.5',
+    date: '11/11/2026',
+    title: 'Crediti Ufficiali, Sincronizzazione Cloud Categorie e Pulizia Automatica Cache',
+    type: 'patch',
+    changes: [
+      'Aggiornati i crediti ufficiali: Sviluppato da Bruno Astemio (bam@68).',
+      'Introdotta persistenza cloud per le categorie su Google Drive (_categories.json).',
+      'Pulizia automatica della cache (Service Worker CacheStorage, IndexedDB file temporanei e cache ID) all\'accesso e alla sincronizzazione.',
+    ],
+  },
+  {
+    version: '1.2.4',
+    date: '11/11/2026',
+    title: 'Modale Logo Ingrandito, Piccola Wiki e Crediti',
+    type: 'patch',
+    changes: [
+      'Cliccando sull\'icona di MemoTralci in alto a sinistra si apre il pannello con logo ingrandito, versione SemVer, Piccola Wiki di guida rapida e Crediti.',
+    ],
+  },
+  {
+    version: '1.2.3',
+    date: '11/11/2026',
+    title: 'Scatti Orario a 5 Minuti e Controllo Orario di Fine Evento',
+    type: 'patch',
+    changes: [
+      'Impostato il selettore dei minuti del calendario a passi di 5 minuti (00, 05, 10, 15...).',
+      'Vincolato l\'orario di fine evento ad essere sempre uguale o successivo all\'orario di inizio con adeguamento automatico.',
+    ],
+  },
+  {
+    version: '1.2.2',
+    date: '11/11/2026',
+    title: 'Categorie Facoltative e Filtro "Senza categoria"',
+    type: 'patch',
+    changes: [
+      'Rimossa la preselezione obbligatoria di una categoria di default su nuovi eventi e attività.',
+      'Aggiunto il filtro rapido "Senza categoria" nel Calendario e nelle Cose da Fare.',
+    ],
+  },
+  {
+    version: '1.2.1',
+    date: '11/11/2026',
+    title: 'Sessione Google Persistente e Silent Token Refresh',
+    type: 'patch',
+    changes: [
+      'Implementato il rinnovo silenzioso automatico del token OAuth Google in background prima della scadenza oraria.',
+      'Aggiunto intercettore automatico sugli errori HTTP 401 con retry trasparente e controllo al ritorno in primo piano dell\'app.',
+    ],
+  },
+  {
+    version: '1.2.0',
+    date: '11/11/2026',
+    title: 'Gestione Completa Categorie, Multi-Categoria e Cancellazione Fisica Allegati',
+    type: 'minor',
+    changes: [
+      'Nuove categorie predefinite: Prog,Vita, Segreteria, Chiesa, Missione, Giovani.',
+      'Possibilità di creare, rinominare, cambiare colore ed eliminare qualsiasi categoria senza perdere i task o gli eventi associati.',
+      'Supporto all\'assegnazione di più categorie contemporaneamente su ogni evento o attività.',
+      'Cancellazione fisica automatica degli allegati da Google Drive quando viene rimosso un allegato o eliminato il task/evento collegato.',
+    ],
+  },
+  {
+    version: '1.1.1',
+    date: '10/11/2026',
+    title: 'Categorie Personalizzabili, Drag & Drop e Tombstone Task',
+    type: 'patch',
+    changes: [
+      'Introdotto selettore colori per le categorie, caricamento allegati Drag & Drop e registro locale dei task eliminati (tombstones).',
+    ],
+  },
+  {
+    version: '1.1.0',
+    date: '10/11/2026',
+    title: 'Sincronizzazione Multi-Dispositivo Task su Google Drive',
+    type: 'minor',
+    changes: [
+      'Archiviazione cloud delle Cose da Fare nella sottocartella Archivio_Task su Google Drive.',
+      'Filtro intelligente per mostrare nella vista Allegati solo i file reali caricati dall\'utente.',
+    ],
+  },
+  {
+    version: '1.0.0',
+    date: '10/11/2026',
+    title: 'Primo Rilascio MemoTralci PWA',
+    type: 'major',
+    changes: [
+      'Applicazione PWA installabile su PC, Android e iOS con supporto Offline-First (IndexedDB) e Tema Chiaro/Scuro.',
+      'Integrazione diretta client-side con Google Calendar ("Segreteria") e Google Drive ("Allegati memotralci").',
+      'Registrazione note vocali dal microfono, ricerca rapida (Ctrl+K) ed esportazione calendario ICS / Backup JSON.',
+    ],
+  },
+]

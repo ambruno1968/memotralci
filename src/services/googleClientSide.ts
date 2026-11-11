@@ -5,7 +5,7 @@
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
 import type { AppTaskItem } from '../types/task.ts'
-import type { AppCategoryItem } from '../types/category.ts'
+import type { CategoriesCloudPayload } from '../types/category.ts'
 
 export interface GoogleUserInfo {
   id?: string
@@ -436,14 +436,41 @@ class GoogleClientSide {
       const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
       const end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
 
-      let category: any = 'altro'
+      let category: any = undefined
+      let categories: string[] = []
       let attachments: any[] = []
 
-      if (item.extendedProperties?.private) {
-        category = item.extendedProperties.private.category || 'altro'
-        if (item.extendedProperties.private.attachments) {
+      const extProps = item.extendedProperties?.private || item.extendedProperties?.shared
+      if (extProps) {
+        if (extProps.categories) {
           try {
-            attachments = JSON.parse(item.extendedProperties.private.attachments)
+            const parsed = JSON.parse(extProps.categories)
+            if (Array.isArray(parsed)) {
+              categories = parsed.filter(
+                (c: any) => typeof c === 'string' && c.trim() && c.trim().toLowerCase() !== 'altro'
+              )
+            }
+          } catch {}
+        }
+
+        const rawCat = extProps.category
+        if (typeof rawCat === 'string' && rawCat.trim() && rawCat.trim().toLowerCase() !== 'altro') {
+          const splitCats = rawCat
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter((s: string) => Boolean(s) && s.toLowerCase() !== 'altro')
+          for (const sc of splitCats) {
+            if (!categories.includes(sc)) categories.push(sc)
+          }
+        }
+
+        if (categories.length > 0) {
+          category = categories.join(',')
+        }
+
+        if (extProps.attachments) {
+          try {
+            attachments = JSON.parse(extProps.attachments)
           } catch {
             attachments = []
           }
@@ -459,6 +486,7 @@ class GoogleClientSide {
         end,
         allDay: isAllDay,
         category,
+        categories,
         attachments,
         googleEventId: item.id,
       }
@@ -478,6 +506,13 @@ class GoogleClientSide {
       ? { date: eventData.end.split('T')[0] }
       : { dateTime: new Date(eventData.end).toISOString() }
 
+    const catsArray = Array.isArray(eventData.categories)
+      ? eventData.categories.filter((c) => c && c.trim() && c.trim().toLowerCase() !== 'altro')
+      : eventData.category && eventData.category.trim().toLowerCase() !== 'altro'
+        ? eventData.category.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+    const catStr = catsArray.join(',')
+
     const body = {
       summary: eventData.title,
       description: eventData.description,
@@ -486,8 +521,14 @@ class GoogleClientSide {
       end: endProp,
       extendedProperties: {
         private: {
-          category: eventData.category || 'altro',
+          category: catStr,
+          categories: JSON.stringify(catsArray),
           attachments: JSON.stringify(eventData.attachments || []),
+          source: 'memotralci',
+        },
+        shared: {
+          category: catStr,
+          categories: JSON.stringify(catsArray),
           source: 'memotralci',
         },
       },
@@ -514,7 +555,8 @@ class GoogleClientSide {
       start: eventData.start,
       end: eventData.end,
       allDay: eventData.allDay,
-      category: eventData.category,
+      category: catStr || undefined,
+      categories: catsArray,
       attachments: eventData.attachments,
       googleEventId: item.id,
     }
@@ -539,11 +581,24 @@ class GoogleClientSide {
         : { dateTime: new Date(eventData.end || new Date()).toISOString() }
     }
 
-    if (eventData.category !== undefined || eventData.attachments !== undefined) {
+    const catsArray = Array.isArray(eventData.categories)
+      ? eventData.categories.filter((c) => c && c.trim() && c.trim().toLowerCase() !== 'altro')
+      : eventData.category && eventData.category.trim().toLowerCase() !== 'altro'
+        ? eventData.category.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+    const catStr = catsArray.join(',')
+
+    if (eventData.categories !== undefined || eventData.category !== undefined || eventData.attachments !== undefined) {
       patchBody.extendedProperties = {
         private: {
-          category: eventData.category || 'altro',
+          category: catStr,
+          categories: JSON.stringify(catsArray),
           attachments: JSON.stringify(eventData.attachments || []),
+          source: 'memotralci',
+        },
+        shared: {
+          category: catStr,
+          categories: JSON.stringify(catsArray),
           source: 'memotralci',
         },
       }
@@ -573,7 +628,8 @@ class GoogleClientSide {
       start: (eventData.allDay ? item.start?.date : item.start?.dateTime) || eventData.start || '',
       end: (eventData.allDay ? item.end?.date : item.end?.dateTime) || eventData.end || '',
       allDay: Boolean(item.start?.date),
-      category: eventData.category,
+      category: catStr || undefined,
+      categories: catsArray,
       attachments: eventData.attachments,
       googleEventId: item.id,
     }
@@ -846,14 +902,14 @@ class GoogleClientSide {
     const contentStr = JSON.stringify(data, null, 2)
     const jsonBlob = new Blob([contentStr], { type: 'application/json' })
 
-    // Verifica se il file esiste già nella cartella
+    // 1. Verifica se il file esiste già nella cartella (o globalmente per i file di indice/categorie)
     let existingFileId: string | null = null
     try {
       const q = matchSuffix
         ? `'${folderId}' in parents and trashed = false`
         : `'${folderId}' in parents and name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
       const searchRes = await this.fetchWithAuth(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=100`
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=50`
       )
       if (searchRes.ok) {
         const searchData = await searchRes.json()
@@ -862,6 +918,19 @@ class GoogleClientSide {
           ? files.find((f) => f.name?.endsWith(matchSuffix))
           : files.find((f) => f.name === fileName)
         if (match?.id) existingFileId = match.id
+      }
+
+      // Fallback di ricerca globale se la cartella non era accessibile con drive.file
+      if (!existingFileId && !matchSuffix) {
+        const globalQ = `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
+        const globalRes = await this.fetchWithAuth(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(globalQ)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=10`
+        )
+        if (globalRes.ok) {
+          const globalData = await globalRes.json()
+          const globalMatch = globalData.files?.[0]
+          if (globalMatch?.id) existingFileId = globalMatch.id
+        }
       }
     } catch {}
 
@@ -898,12 +967,17 @@ class GoogleClientSide {
         const d = await res.json()
         return d.id
       }
-    } else {
-      const metadata = {
+    }
+
+    // 2. Creazione nuovo file (tenta prima nella cartella, poi fallback senza parents se 404 per drive.file)
+    const buildPostBody = (withParent: boolean) => {
+      const metadata: any = {
         name: fileName,
-        parents: [folderId],
         description,
         mimeType: 'application/json',
+      }
+      if (withParent && folderId) {
+        metadata.parents = [folderId]
       }
       const metadataPart = new Blob(
         [
@@ -916,23 +990,40 @@ class GoogleClientSide {
         { type: 'text/plain' }
       )
       const endPart = new Blob([closeDelim], { type: 'text/plain' })
-      const multipartBody = new Blob([metadataPart, jsonBlob, endPart])
-
-      const res = await this.fetchWithAuth(
-        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': `multipart/related; boundary=${boundary}`,
-          },
-          body: multipartBody,
-        }
-      )
-      if (res.ok) {
-        const d = await res.json()
-        return d.id
-      }
+      return new Blob([metadataPart, jsonBlob, endPart])
     }
+
+    const res = await this.fetchWithAuth(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: buildPostBody(true),
+      }
+    )
+    if (res.ok) {
+      const d = await res.json()
+      return d.id
+    }
+
+    // Fallback automatico senza parent folder (necessario se la cartella è stata creata manualmente fuori da drive.file)
+    const fallbackRes = await this.fetchWithAuth(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: buildPostBody(false),
+      }
+    )
+    if (fallbackRes.ok) {
+      const d = await fallbackRes.json()
+      return d.id
+    }
+
     return ''
   }
 
@@ -940,10 +1031,10 @@ class GoogleClientSide {
     try {
       const folderId = await this.resolveTaskArchiveFolderId()
 
-      // 1. Prova prima a leggere l'indice _tasks_index.json
-      const indexQuery = `'${folderId}' in parents and name = '_tasks_index.json' and trashed = false`
+      // 1. Prova prima a leggere l'indice _tasks_index.json (sia nella cartella sia globalmente per fallback drive.file)
+      const indexQuery = `name = '_tasks_index.json' and trashed = false`
       const indexRes = await this.fetchWithAuth(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(indexQuery)}&fields=files(id,name)&pageSize=1`
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(indexQuery)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=1`
       )
 
       if (indexRes.ok) {
@@ -1120,51 +1211,140 @@ class GoogleClientSide {
   }
 
   /**
-   * Recupera le categorie sincronizzate da Google Drive (_categories.json nella cartella Allegati)
+   * Recupera il payload delle categorie sincronizzate dal Cloud (Google Drive _categories.json + Google Calendar Metadata Mirror)
+   * Restituisce sempre la versione più recente (con updatedAt maggiore).
    */
-  public async getDriveCategories(): Promise<AppCategoryItem[] | null> {
-    try {
-      const folderId = await this.resolveDriveFolderId()
-      const query = `'${folderId}' in parents and name = '_categories.json' and trashed = false`
-      const res = await this.fetchWithAuth(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=1`
-      )
-      if (res.ok) {
-        const data = await res.json()
-        const file = data.files?.[0]
-        if (file?.id) {
-          const contentRes = await this.fetchWithAuth(
-            `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`
-          )
-          if (contentRes.ok) {
-            const categories = await contentRes.json()
-            if (Array.isArray(categories) && categories.length > 0) {
-              return categories
-            }
-          }
+  public async getDriveCategories(): Promise<CategoriesCloudPayload | null> {
+    const candidates: CategoriesCloudPayload[] = []
+
+    const normalizePayload = (raw: any): CategoriesCloudPayload | null => {
+      if (!raw) return null
+      if (Array.isArray(raw) && raw.length > 0) {
+        return {
+          version: 1,
+          updatedAt: 0,
+          categories: raw,
+          deletedIds: [],
         }
       }
-    } catch (e) {
-      console.warn('[Google Drive Categories] Errore lettura categorie:', e)
+      if (raw && typeof raw === 'object' && Array.isArray(raw.categories)) {
+        return {
+          version: Number(raw.version || 2),
+          updatedAt: Number(raw.updatedAt || 0),
+          categories: raw.categories,
+          deletedIds: Array.isArray(raw.deletedIds) ? raw.deletedIds : [],
+          explicitReset: Boolean(raw.explicitReset),
+        }
+      }
+      return null
     }
-    return null
+
+    // Canale 1: Google Drive (_categories.json cercato globalmente senza vincolo parent folder per compatibilità drive.file)
+    const drivePromise = (async () => {
+      try {
+        const query = `name = '_categories.json' and trashed = false`
+        const res = await this.fetchWithAuth(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`
+        )
+        if (res.ok) {
+          const data = await res.json()
+          const files: any[] = data.files || []
+          for (const file of files) {
+            if (!file?.id) continue
+            try {
+              const contentRes = await this.fetchWithAuth(
+                `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`
+              )
+              if (contentRes.ok) {
+                const json = await contentRes.json()
+                const parsed = normalizePayload(json)
+                if (parsed) candidates.push(parsed)
+              }
+            } catch {}
+          }
+        }
+      } catch (e) {
+        console.warn('[Google Drive Categories] Errore lettura da Drive:', e)
+      }
+    })()
+
+    // Canale 2: Google Calendar Metadata Mirror (100% condiviso tra tutti i dispositivi connessi al calendario Segreteria)
+    const calendarPromise = (async () => {
+      try {
+        const calId = await this.resolveCalendarId()
+        const calRes = await this.fetchWithAuth(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`
+        )
+        if (calRes.ok) {
+          const calData = await calRes.json()
+          const desc: string = calData.description || ''
+          const match = desc.match(/\[MEMOTRALCI_CATS_V2:(.+?)\]/s)
+          if (match?.[1]) {
+            const rawJson = JSON.parse(match[1])
+            const parsed = normalizePayload(rawJson)
+            if (parsed) candidates.push(parsed)
+          }
+        }
+      } catch (e) {
+        console.warn('[Google Calendar Categories Mirror] Errore lettura metadati calendario:', e)
+      }
+    })()
+
+    await Promise.allSettled([drivePromise, calendarPromise])
+
+    if (candidates.length === 0) return null
+    candidates.sort((a, b) => b.updatedAt - a.updatedAt)
+    return candidates[0]
   }
 
   /**
-   * Salva o aggiorna le categorie nel cloud su Google Drive (_categories.json)
+   * Salva o aggiorna le categorie nel cloud sia su Google Drive (_categories.json) sia nei metadati del Calendario condiviso
    */
-  public async saveDriveCategories(categories: AppCategoryItem[]): Promise<void> {
-    try {
-      const folderId = await this.resolveDriveFolderId()
-      await this.uploadOrUpdateJsonFile(
-        folderId,
-        '_categories.json',
-        categories,
-        'Categorie personalizzate MemoTralci (sincronizzate multi-dispositivo)'
-      )
-    } catch (e) {
-      console.warn('[Google Drive Categories] Errore salvataggio categorie:', e)
-    }
+  public async saveDriveCategories(payload: CategoriesCloudPayload): Promise<void> {
+    // 1. Salva su Google Drive (_categories.json con fallback automatico se la cartella non è scrivibile con drive.file)
+    const drivePromise = (async () => {
+      try {
+        const folderId = await this.resolveDriveFolderId()
+        await this.uploadOrUpdateJsonFile(
+          folderId,
+          '_categories.json',
+          payload,
+          'Categorie personalizzate MemoTralci (sincronizzate multi-dispositivo v2)'
+        )
+      } catch (e) {
+        console.warn('[Google Drive Categories] Errore salvataggio categorie su Drive:', e)
+      }
+    })()
+
+    // 2. Salva mirror nei metadati del calendario Google condiviso ("Segreteria")
+    const calendarPromise = (async () => {
+      try {
+        const calId = await this.resolveCalendarId()
+        const calRes = await this.fetchWithAuth(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`
+        )
+        let baseDesc = ''
+        if (calRes.ok) {
+          const calData = await calRes.json()
+          baseDesc = (calData.description || '').replace(/\s*\[MEMOTRALCI_CATS_V2:.+?\]/s, '').trim()
+        }
+        const tag = `[MEMOTRALCI_CATS_V2:${JSON.stringify(payload)}]`
+        const newDesc = baseDesc ? `${baseDesc}\n\n${tag}` : tag
+
+        await this.fetchWithAuth(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: newDesc }),
+          }
+        )
+      } catch (e) {
+        console.warn('[Google Calendar Categories Mirror] Errore salvataggio metadati calendario:', e)
+      }
+    })()
+
+    await Promise.allSettled([drivePromise, calendarPromise])
   }
 }
 

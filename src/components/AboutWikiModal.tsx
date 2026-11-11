@@ -3,6 +3,7 @@ import {
   X,
   BookOpen,
   Info,
+  History,
   Calendar,
   CheckSquare,
   Tag,
@@ -14,14 +15,14 @@ import {
   Sparkles,
 } from 'lucide-react'
 import appLogo from '../assets/logo-icon.png'
-import { APP_VERSION, APP_CREDITS } from '../config/version.ts'
+import { APP_VERSION, APP_CREDITS, APP_STORYLOG } from '../config/version.ts'
 
 interface AboutWikiModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
-type TabType = 'wiki' | 'credits'
+type TabType = 'wiki' | 'storylog' | 'credits'
 
 export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<TabType>('wiki')
@@ -69,22 +70,34 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
           </div>
 
           {/* Tab switch */}
-          <div className="flex items-center justify-center space-x-2 mt-5">
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
             <button
               onClick={() => setActiveTab('wiki')}
-              className={`flex items-center space-x-1.5 px-4 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
                 activeTab === 'wiki'
                   ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70'
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              <span>Piccola Wiki (Guida)</span>
+              <span>Piccola Wiki</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('storylog')}
+              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'storylog'
+                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>Storylog</span>
             </button>
 
             <button
               onClick={() => setActiveTab('credits')}
-              className={`flex items-center space-x-1.5 px-4 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
                 activeTab === 'credits'
                   ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70'
@@ -193,7 +206,65 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
           </div>
         )}
 
-        {/* Tab 2: Crediti & Informazioni */}
+        {/* Tab 2: Storylog (Storico Versioni) */}
+        {activeTab === 'storylog' && (
+          <div className="p-5 sm:p-6 overflow-y-auto space-y-3.5 flex-1 text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+            <div className="flex items-center justify-between px-1 pb-1">
+              <div className="flex items-center space-x-2">
+                <History className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span className="font-black text-slate-900 dark:text-white text-sm">
+                  Cronologia Rilasci (Storylog SemVer)
+                </span>
+              </div>
+              <span className="text-[11px] font-bold text-slate-400">
+                {APP_STORYLOG.length} versioni
+              </span>
+            </div>
+
+            {APP_STORYLOG.map((entry, idx) => (
+              <div
+                key={entry.version}
+                className={`p-4 rounded-2xl border space-y-2 transition ${
+                  idx === 0
+                    ? 'bg-teal-50/70 dark:bg-teal-950/35 border-teal-300 dark:border-teal-800/80 shadow-xs'
+                    : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/70 dark:border-slate-700/70'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-lg text-xs font-black ${
+                        idx === 0
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      v{entry.version}
+                    </span>
+                    <span className="font-black text-slate-900 dark:text-white text-xs sm:text-sm">
+                      {entry.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    {idx === 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase">
+                        Attuale
+                      </span>
+                    )}
+                    <span className="text-[11px] font-bold text-slate-400">{entry.date}</span>
+                  </div>
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed pt-0.5">
+                  {entry.changes.map((change, cIdx) => (
+                    <li key={cIdx}>{change}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Tab 3: Crediti & Informazioni */}
         {activeTab === 'credits' && (
           <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1 text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700 space-y-3">

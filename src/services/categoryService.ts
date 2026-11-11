@@ -1,9 +1,9 @@
 // src/services/categoryService.ts
 // Gestione dinamica delle Categorie per Eventi e Attività (To-Do)
-// Sincronizzazione automatica bidirezionale con Google Drive (_categories.json)
+// Sincronizzazione automatica bidirezionale multi-dispositivo (Google Drive + Google Calendar Metadata Mirror)
 
-export type { CategoryColorName, AppCategoryItem } from '../types/category.ts'
-import type { CategoryColorName, AppCategoryItem } from '../types/category.ts'
+export type { CategoryColorName, AppCategoryItem, CategoriesCloudPayload } from '../types/category.ts'
+import type { CategoryColorName, AppCategoryItem, CategoriesCloudPayload } from '../types/category.ts'
 import { googleClientSide } from './googleClientSide.ts'
 
 export interface CategoryStyle {
@@ -16,7 +16,10 @@ export interface CategoryStyle {
   cardGradient: string
 }
 
-export const COLOR_PALETTE: Record<CategoryColorName, { label: string; badge: string; dot: string; border: string; bg: string; text: string; gradient: string }> = {
+export const COLOR_PALETTE: Record<
+  CategoryColorName,
+  { label: string; badge: string; dot: string; border: string; bg: string; text: string; gradient: string }
+> = {
   teal: {
     label: 'Verde Acqua (Teal)',
     bg: 'bg-teal-50/90 dark:bg-teal-950/60',
@@ -100,81 +103,187 @@ export const DEFAULT_CATEGORIES: AppCategoryItem[] = [
 ]
 
 const STORAGE_KEY = 'memotralci_custom_categories_v2'
+const META_STORAGE_KEY = 'memotralci_categories_meta_v2'
+
 type Listener = (cats: AppCategoryItem[]) => void
 const listeners = new Set<Listener>()
 
+function isSameAsDefaults(cats: AppCategoryItem[]): boolean {
+  if (!Array.isArray(cats) || cats.length !== DEFAULT_CATEGORIES.length) return false
+  return cats.every((c, idx) => {
+    const def = DEFAULT_CATEGORIES[idx]
+    return def && c.id === def.id && c.label === def.label && c.color === def.color
+  })
+}
+
 class CategoryService {
   private categories: AppCategoryItem[] = []
+  private updatedAt: number = 0
+  private deletedIds: string[] = []
+  private explicitReset: boolean = false
+  private syncPromise: Promise<AppCategoryItem[]> | null = null
 
   constructor() {
     this.load()
-    // Tenta sincronizzazione rapida all'avvio se Google è connesso
-    if (typeof window !== 'undefined' && googleClientSide.isConnected()) {
-      this.syncWithDrive().catch(() => {})
-    }
   }
 
   private load() {
+    let loadedCats: AppCategoryItem[] | null = null
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          this.categories = parsed
-          return
+          loadedCats = parsed.filter((c) => c && typeof c.id === 'string' && typeof c.label === 'string')
         }
       }
     } catch {}
-    // Inizializzazione con le nuove categorie default
+
+    try {
+      const rawMeta = localStorage.getItem(META_STORAGE_KEY)
+      if (rawMeta) {
+        const meta = JSON.parse(rawMeta)
+        this.updatedAt = Number(meta.updatedAt || 0)
+        this.deletedIds = Array.isArray(meta.deletedIds) ? meta.deletedIds : []
+        this.explicitReset = Boolean(meta.explicitReset)
+      }
+    } catch {}
+
+    if (loadedCats && loadedCats.length > 0) {
+      this.categories = loadedCats
+      // Se l'utente aveva già personalizzato le categorie in v1.2.4/v1.2.5 ma non aveva ancora il timestamp meta:
+      if (this.updatedAt === 0 && !isSameAsDefaults(this.categories)) {
+        this.updatedAt = Date.now()
+        const currentIds = new Set(this.categories.map((c) => c.id))
+        this.deletedIds = DEFAULT_CATEGORIES.filter((d) => !currentIds.has(d.id)).map((d) => d.id)
+        this.saveMeta()
+      }
+      return
+    }
+
+    // Inizializzazione con le categorie default (updatedAt = 0 così cede sempre il passo a eventuali personalizzazioni cloud)
     this.categories = DEFAULT_CATEGORIES.map((c) => ({ ...c }))
+    this.updatedAt = 0
+    this.deletedIds = []
+    this.explicitReset = false
     this.save(false)
+  }
+
+  private saveMeta() {
+    try {
+      localStorage.setItem(
+        META_STORAGE_KEY,
+        JSON.stringify({
+          updatedAt: this.updatedAt,
+          deletedIds: this.deletedIds,
+          explicitReset: this.explicitReset,
+        })
+      )
+    } catch {}
+  }
+
+  private buildPayload(): CategoriesCloudPayload {
+    return {
+      version: 2,
+      updatedAt: this.updatedAt,
+      categories: [...this.categories],
+      deletedIds: [...this.deletedIds],
+      explicitReset: this.explicitReset,
+    }
   }
 
   private save(syncCloud = true) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.categories))
+      this.saveMeta()
     } catch {}
     listeners.forEach((l) => l([...this.categories]))
 
     if (syncCloud && googleClientSide.isConnected()) {
-      googleClientSide.saveDriveCategories(this.categories).catch((e) => {
-        console.warn('[CategoryService] Errore salvataggio automatico categorie su Drive:', e)
+      googleClientSide.saveDriveCategories(this.buildPayload()).catch((e) => {
+        console.warn('[CategoryService] Errore salvataggio automatico categorie nel cloud:', e)
       })
     }
   }
 
   /**
-   * Sincronizza bidirezionalmente le categorie con Google Drive:
-   * Legge _categories.json da Google Drive; se trovato lo adotta come stato cloud e aggiorna la cache locale.
-   * Se non presente su Drive, carica lo stato locale corrente su Drive.
+   * Sincronizza bidirezionalmente le categorie con il Cloud (Google Drive + Google Calendar Metadata Mirror):
+   * - Evita chiamate concorrenti (mutex syncPromise)
+   * - Confronta updatedAt locale e remoto così le categorie personalizzate non vengono mai sovrascritte
+   *   dalle categorie predefinite di un dispositivo non ancora allineato.
    */
   public async syncWithDrive(): Promise<AppCategoryItem[]> {
     if (!googleClientSide.isConnected()) {
       return [...this.categories]
     }
 
-    try {
-      const cloudCats = await googleClientSide.getDriveCategories()
-      if (cloudCats && Array.isArray(cloudCats) && cloudCats.length > 0) {
-        // Validazione minima formato categorie
-        const validCats = cloudCats.filter((c) => c && typeof c.id === 'string' && typeof c.label === 'string')
-        if (validCats.length > 0) {
-          this.categories = validCats
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.categories))
-          } catch {}
-          listeners.forEach((l) => l([...this.categories]))
-          return [...this.categories]
-        }
-      } else if (this.categories.length > 0) {
-        // Su Drive non c'è ancora _categories.json: effettua primo push delle categorie correnti
-        await googleClientSide.saveDriveCategories(this.categories)
-      }
-    } catch (e) {
-      console.warn('[CategoryService] Errore durante syncWithDrive:', e)
+    if (this.syncPromise) {
+      return this.syncPromise
     }
 
-    return [...this.categories]
+    this.syncPromise = (async () => {
+      try {
+        const cloudPayload = await googleClientSide.getDriveCategories()
+
+        if (cloudPayload && Array.isArray(cloudPayload.categories) && cloudPayload.categories.length > 0) {
+          const validCloudCats = cloudPayload.categories.filter(
+            (c) => c && typeof c.id === 'string' && typeof c.label === 'string'
+          )
+
+          if (validCloudCats.length > 0) {
+            const cloudIsUntouchedDefault =
+              isSameAsDefaults(validCloudCats) && !cloudPayload.explicitReset && cloudPayload.updatedAt === 0
+            const effectiveCloudUpdatedAt = cloudIsUntouchedDefault
+              ? 0
+              : cloudPayload.updatedAt > 0
+                ? cloudPayload.updatedAt
+                : !isSameAsDefaults(validCloudCats)
+                  ? 1000
+                  : 0
+
+            if (effectiveCloudUpdatedAt > this.updatedAt) {
+              // Il Cloud ha una versione più recente delle categorie: adottala sul dispositivo
+              const mergedDeleted = Array.from(
+                new Set([...(cloudPayload.deletedIds || []), ...this.deletedIds])
+              )
+              const mergedCats = [...validCloudCats]
+
+              // Se anche questo dispositivo aveva categorie custom create localmente e non eliminate, uniscile
+              if (this.updatedAt > 0 && !cloudPayload.explicitReset) {
+                const cloudIds = new Set(mergedCats.map((c) => c.id))
+                for (const localCat of this.categories) {
+                  if (!localCat.isDefault && !cloudIds.has(localCat.id) && !mergedDeleted.includes(localCat.id)) {
+                    mergedCats.push(localCat)
+                  }
+                }
+              }
+
+              this.categories = mergedCats
+              this.updatedAt = effectiveCloudUpdatedAt
+              this.deletedIds = cloudPayload.deletedIds || []
+              this.explicitReset = Boolean(cloudPayload.explicitReset)
+              this.save(false)
+              return [...this.categories]
+            } else if (this.updatedAt > effectiveCloudUpdatedAt) {
+              // Questo dispositivo ha personalizzazioni più recenti rispetto al Cloud: aggiorna il Cloud
+              await googleClientSide.saveDriveCategories(this.buildPayload())
+              return [...this.categories]
+            }
+          }
+        } else if (this.categories.length > 0) {
+          // Nessun file nel Cloud: carica lo stato corrente
+          await googleClientSide.saveDriveCategories(this.buildPayload())
+        }
+      } catch (e) {
+        console.warn('[CategoryService] Errore durante syncWithDrive:', e)
+      } finally {
+        this.syncPromise = null
+      }
+
+      return [...this.categories]
+    })()
+
+    return this.syncPromise
   }
 
   public subscribe(listener: Listener): () => void {
@@ -189,20 +298,30 @@ class CategoryService {
     return [...this.categories]
   }
 
+  public hasCategory(idOrLabel: string): boolean {
+    const lower = idOrLabel.toLowerCase().trim()
+    return this.categories.some((c) => c.id.toLowerCase() === lower || c.label.toLowerCase() === lower)
+  }
+
   public addCategory(label: string, color: CategoryColorName = 'teal'): AppCategoryItem {
     const trimmed = label.trim()
-    const id = trimmed
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '_')
-      .replace(/_+/g, '_')
-      .slice(0, 24) || `cat_${Date.now()}`
+    const id =
+      trimmed
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .slice(0, 24) || `cat_${Date.now()}`
+
+    this.deletedIds = this.deletedIds.filter((d) => d !== id)
+    this.explicitReset = false
+    this.updatedAt = Date.now()
 
     // Se esiste già con questo ID, aggiornalo
     const existingIndex = this.categories.findIndex((c) => c.id === id)
     if (existingIndex >= 0) {
       this.categories[existingIndex].label = trimmed
       this.categories[existingIndex].color = color
-      this.save()
+      this.save(true)
       return this.categories[existingIndex]
     }
 
@@ -213,7 +332,7 @@ class CategoryService {
       isDefault: false,
     }
     this.categories.push(newCat)
-    this.save()
+    this.save(true)
     return newCat
   }
 
@@ -230,7 +349,9 @@ class CategoryService {
       color: newColor || this.categories[index].color,
     }
 
-    this.save()
+    this.explicitReset = false
+    this.updatedAt = Date.now()
+    this.save(true)
     return this.categories[index]
   }
 
@@ -239,7 +360,12 @@ class CategoryService {
     // Permette di eliminare qualsiasi categoria senza intaccare i task
     this.categories = this.categories.filter((c) => c.id !== id)
     if (this.categories.length !== prevLen) {
-      this.save()
+      if (!this.deletedIds.includes(id)) {
+        this.deletedIds.push(id)
+      }
+      this.explicitReset = false
+      this.updatedAt = Date.now()
+      this.save(true)
       return true
     }
     return false
@@ -247,7 +373,10 @@ class CategoryService {
 
   public resetToDefaults(): AppCategoryItem[] {
     this.categories = DEFAULT_CATEGORIES.map((c) => ({ ...c }))
-    this.save()
+    this.deletedIds = []
+    this.explicitReset = true
+    this.updatedAt = Date.now()
+    this.save(true)
     return [...this.categories]
   }
 
@@ -291,23 +420,28 @@ export const categoryService = new CategoryService()
 /**
  * Normalizza le categorie di un task o evento in un array di stringhe pulito.
  * Se non è impostata alcuna categoria, restituisce un array vuoto [] (categoria facoltativa).
- * Supporta sia il formato singolo (es. "prog_vita"), sia una lista separata da virgole,
- * sia un array esplicito `categories: string[]`.
+ * Ignora l'etichetta legacy "altro" se non è stata creata esplicitamente come categoria.
  */
 export function normalizeCategories(item?: { category?: string; categories?: string[] } | null): string[] {
   if (!item) return []
   const result: string[] = []
 
+  const isLegacyAltro = (val: string) =>
+    val.toLowerCase() === 'altro' && !categoryService.hasCategory('altro')
+
   if (Array.isArray(item.categories)) {
     for (const c of item.categories) {
-      if (typeof c === 'string' && c.trim() && !result.includes(c.trim())) {
+      if (typeof c === 'string' && c.trim() && !isLegacyAltro(c.trim()) && !result.includes(c.trim())) {
         result.push(c.trim())
       }
     }
   }
 
   if (typeof item.category === 'string' && item.category.trim()) {
-    const parts = item.category.split(',').map((p) => p.trim()).filter(Boolean)
+    const parts = item.category
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => Boolean(p) && !isLegacyAltro(p))
     for (const p of parts) {
       if (!result.includes(p)) {
         result.push(p)
@@ -317,4 +451,3 @@ export function normalizeCategories(item?: { category?: string; categories?: str
 
   return result
 }
-

@@ -6,7 +6,6 @@ import {
   CalendarDays,
   CheckSquare,
   Paperclip,
-  Plus,
   Download,
   Cloud,
   CloudOff,
@@ -39,8 +38,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   onSelectView,
   onOpenGoogleSettings,
-  onOpenEventModal,
-  onOpenTaskModal,
   googleStatus,
   attachmentsCount,
   tasksPendingCount,
@@ -209,17 +206,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="sm:hidden">Locale</span>
                 </>
               )}
-            </button>
-
-            {/* Quick Add Button */}
-            <button
-              onClick={currentView === 'tasks' ? onOpenTaskModal : onOpenEventModal}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs shadow-md shadow-indigo-500/30 transition cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                {currentView === 'tasks' ? 'Nuova Task' : 'Nuovo Evento'}
-              </span>
             </button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 // src/types/category.ts
-// Modelli dati per le categorie dinamiche dell'applicazione
+// Modelli dati per le categorie dinamiche dell'applicazione e sincronizzazione Cloud
 
 export type CategoryColorName =
   | 'indigo'
@@ -16,4 +16,12 @@ export interface AppCategoryItem {
   label: string
   color: CategoryColorName
   isDefault?: boolean
+}
+
+export interface CategoriesCloudPayload {
+  version: number
+  updatedAt: number
+  categories: AppCategoryItem[]
+  deletedIds?: string[]
+  explicitReset?: boolean
 }
