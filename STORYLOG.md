@@ -7,6 +7,12 @@
 
 ---
 
+## [v2.2.2] — 12 Novembre 2026
+### 🎨 Pulizia Testata Superiore
+- Rimossi il sottotitolo e il badge della versione dalla testata superiore, lasciando solo il **logo** e **MemoTralci** (la versione resta visibile nel footer in basso).
+
+---
+
 ## [v2.2.1] — 12 Novembre 2026
 ### 🎨 Uniformazione Selettore Filtro Categorie
 - Uniformato il filtro categorie tra **Agenda & Calendario**, **Cose da Fare** e **Gestione Allegati & Documenti** utilizzando lo stesso menu a tendina compatto (`Tutte le categorie` / `Senza categoria`).

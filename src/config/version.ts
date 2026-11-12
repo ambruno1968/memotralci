@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.2.1'
+export const APP_VERSION = 'v2.2.2'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.2.1',
+  version: '2.2.2',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,15 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.2.2',
+    date: '12/11/2026',
+    title: 'Pulizia Testata Superiore (Solo Logo e Nome)',
+    type: 'patch',
+    changes: [
+      'Rimossi il sottotitolo ("Agenda • Calendario • Note • Info & Guida") e il badge della versione dalla barra superiore, lasciando solo logo e nome MemoTralci (la versione rimane visibile nel footer in basso).',
+    ],
+  },
   {
     version: '2.2.1',
     date: '12/11/2026',
