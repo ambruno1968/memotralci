@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.1.0'
+export const APP_VERSION = 'v2.2.0'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.1.0',
+  version: '2.2.0',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,18 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.2.0',
+    date: '12/11/2026',
+    title: 'Scadenze Imminenti, Anteprima PDF/Multi-formato, Sync Categorie Task-Allegati & Riorganizzazione Drive',
+    type: 'minor',
+    changes: [
+      'Nuovo pannello "Scadenze & Impegni Imminenti" richiamabile dalla barra superiore e con apertura automatica se ci sono impegni o task per domani (include questa settimana, settimana prossima e task senza scadenza).',
+      'Sincronizzazione bidirezionale automatica delle categorie tra Task e Allegati associati (se cambi categoria al task aggiorna gli allegati e viceversa).',
+      'Potenziata l\'anteprima in-app per PDF (risolto download automatico), immagini, video, audio, tabelle CSV, file di testo/JSON e documenti Office.',
+      'Riorganizzazione automatica Google Drive senza perdere collegamenti: unico file _categories.json e sottocartelle separate Archivio_Allegati e Archivio_Note_Vocali.',
+    ],
+  },
   {
     version: '2.1.0',
     date: '12/11/2026',

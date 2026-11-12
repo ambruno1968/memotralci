@@ -76,7 +76,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setIsUploading(true)
 
     try {
-      const uploadPromises = Array.from(files).map((f) => api.uploadFile(f))
+      const uploadPromises = Array.from(files).map((f) => api.uploadFile(f, categories))
       const uploadedResults = await Promise.all(uploadPromises)
 
       const newAtts: EventAttachment[] = uploadedResults.map((u) => ({
@@ -101,7 +101,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   async function handleSaveVoiceMemo(audioFile: File) {
     setIsUploading(true)
     try {
-      const uploaded = await api.uploadFile(audioFile)
+      const uploaded = await api.uploadFile(audioFile, categories)
       setAttachments((prev) => [
         ...prev,
         {

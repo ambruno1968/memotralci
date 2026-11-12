@@ -7,6 +7,19 @@
 
 ---
 
+## [v2.2.0] — 12 Novembre 2026
+### ✨ Scadenze Imminenti, Anteprima PDF/Multi-formato, Sync Categorie Task-Allegati & Riorganizzazione Drive
+- **Scadenze & Impegni Imminenti:**
+  - Nuovo elenco richiamabile dal pulsante campanella in testata (con apertura automatica se sono presenti impegni o task per **domani**), suddiviso in *Domani*, *Task scaduti*, *Questa Settimana*, *Settimana Prossima* e *Task senza scadenza*.
+- **Sincronizzazione Bidirezionale Categorie Task ↔ Allegati:**
+  - Gli allegati associati a un task ereditano e aggiornano automaticamente la categoria del task (e restano senza categoria finché non viene impostata); modificando la categoria dell'allegato si aggiorna anche il task collegato.
+- **Anteprima PDF e Principali Formati:**
+  - Risolto il download forzato dei PDF usando Blob autenticati e Google Drive `/preview`, con supporto inline anche per immagini, video, audio, tabelle CSV, testo/JSON/MD e documenti Office.
+- **Riorganizzazione Cartella Google Drive (zero perdita collegamenti):**
+  - Consolidamento su un unico file `_categories.json` e separazione automatica in `Archivio_Allegati` e `Archivio_Note_Vocali` preservando gli ID e i link esistenti.
+
+---
+
 ## [v2.1.0] — 12 Novembre 2026
 ### ✨ Categorie Indipendenti per Documenti & Allegati e Aggiornamento Denominazione
 - **Categorie su Documenti e Allegati (`Gestione Allegati & Documenti`):**

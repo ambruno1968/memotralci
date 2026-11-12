@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   RefreshCw,
+  BellRing,
 } from 'lucide-react'
 import type { GoogleStatus } from '../services/api.ts'
 
@@ -32,6 +33,8 @@ interface NavbarProps {
   onToggleDark: () => void
   onSync?: () => void
   isSyncing?: boolean
+  onOpenDeadlines?: () => void
+  tomorrowDeadlinesCount?: number
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,6 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleDark,
   onSync,
   isSyncing = false,
+  onOpenDeadlines,
+  tomorrowDeadlinesCount = 0,
 }) => {
   const [isAboutOpen, setIsAboutOpen] = useState(false)
 
@@ -134,6 +139,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action buttons */}
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            {/* Scadenze Imminenti Button */}
+            {onOpenDeadlines && (
+              <button
+                type="button"
+                onClick={onOpenDeadlines}
+                className="relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-amber-200 dark:border-amber-800/70 bg-amber-50/90 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 transition shadow-xs cursor-pointer"
+                title="Scadenze imminenti (questa settimana, prossima settimana e task senza scadenza)"
+                aria-label="Scadenze imminenti"
+              >
+                <BellRing className="w-4 h-4" />
+                {tomorrowDeadlinesCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-600 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
+                    {tomorrowDeadlinesCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Dark Mode Switcher */}
             <button
               type="button"

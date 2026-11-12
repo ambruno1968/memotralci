@@ -45,6 +45,8 @@ const STORAGE_KEYS = {
   CALENDAR_ID: 'memotralci_resolved_cal_id',
   FOLDER_ID: 'memotralci_resolved_folder_id',
   TASK_FOLDER_ID: 'memotralci_task_folder_id',
+  ATTACHMENTS_FOLDER_ID: 'memotralci_attachments_folder_id',
+  VOICE_FOLDER_ID: 'memotralci_voice_folder_id',
   RECENT_EVENTS: 'memotralci_recent_events_v2',
   DELETED_EVENTS: 'memotralci_deleted_events_v2',
 }
@@ -63,14 +65,20 @@ class GoogleClientSide {
   private cachedCalendarId: string | null = null
   private cachedFolderId: string | null = null
   private cachedTaskFolderId: string | null = null
+  private cachedAttachmentsFolderId: string | null = null
+  private cachedVoiceFolderId: string | null = null
   private refreshTimer: any = null
   private refreshPromise: Promise<string | null> | null = null
+  private reorganizePromise: Promise<void> | null = null
+  private saveCategoriesMutex: Promise<void> = Promise.resolve()
   public lastAuthError: boolean = false
 
   constructor() {
     this.cachedCalendarId = localStorage.getItem(STORAGE_KEYS.CALENDAR_ID)
     this.cachedFolderId = localStorage.getItem(STORAGE_KEYS.FOLDER_ID)
     this.cachedTaskFolderId = localStorage.getItem(STORAGE_KEYS.TASK_FOLDER_ID)
+    this.cachedAttachmentsFolderId = localStorage.getItem(STORAGE_KEYS.ATTACHMENTS_FOLDER_ID)
+    this.cachedVoiceFolderId = localStorage.getItem(STORAGE_KEYS.VOICE_FOLDER_ID)
 
     this.restoreSessionFromIndexedDB()
     this.setupLifecycleListeners()
@@ -1207,8 +1215,90 @@ class GoogleClientSide {
     return []
   }
 
+  private isVoiceNoteFile(mimeType?: string, fileName?: string): boolean {
+    const mime = (mimeType || '').toLowerCase()
+    const name = (fileName || '').toLowerCase()
+    const ext = name.split('.').pop() || ''
+    return (
+      mime.startsWith('audio/') ||
+      name.startsWith('nota_vocale_') ||
+      ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'webm'].includes(ext)
+    )
+  }
+
+  private async resolveSubfolderId(
+    folderName: string,
+    storageKey: string,
+    description: string
+  ): Promise<string> {
+    const parentFolderId = await this.resolveDriveFolderId()
+    try {
+      const q = `'${parentFolderId}' in parents and name = '${folderName.replace(
+        /'/g,
+        "\\'"
+      )}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+      const searchRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`
+      )
+      if (searchRes.ok) {
+        const data = await searchRes.json()
+        const found = data.files && data.files[0]
+        if (found?.id) {
+          localStorage.setItem(storageKey, found.id)
+          return found.id
+        }
+      }
+
+      const createRes = await this.fetchWithAuth('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: folderName,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [parentFolderId],
+          description,
+        }),
+      })
+      if (createRes.ok) {
+        const created = await createRes.json()
+        if (created?.id) {
+          localStorage.setItem(storageKey, created.id)
+          return created.id
+        }
+      }
+    } catch (e) {
+      console.warn(`[Google Drive] Risoluzione sottocartella "${folderName}" fallita:`, e)
+    }
+    return parentFolderId
+  }
+
+  public async resolveAttachmentsArchiveFolderId(): Promise<string> {
+    if (this.cachedAttachmentsFolderId) return this.cachedAttachmentsFolderId
+    const id = await this.resolveSubfolderId(
+      'Archivio_Allegati',
+      STORAGE_KEYS.ATTACHMENTS_FOLDER_ID,
+      'Archivio documenti e allegati MemoTralci'
+    )
+    this.cachedAttachmentsFolderId = id
+    return id
+  }
+
+  public async resolveVoiceNotesArchiveFolderId(): Promise<string> {
+    if (this.cachedVoiceFolderId) return this.cachedVoiceFolderId
+    const id = await this.resolveSubfolderId(
+      'Archivio_Note_Vocali',
+      STORAGE_KEYS.VOICE_FOLDER_ID,
+      'Archivio note vocali e registrazioni audio MemoTralci'
+    )
+    this.cachedVoiceFolderId = id
+    return id
+  }
+
   public async uploadFile(file: File, categories: string[] = []): Promise<UploadedAttachment> {
-    const folderId = await this.resolveDriveFolderId()
+    const isVoice = this.isVoiceNoteFile(file.type, file.name)
+    const folderId = isVoice
+      ? await this.resolveVoiceNotesArchiveFolderId()
+      : await this.resolveAttachmentsArchiveFolderId()
 
     // Preparazione multipart upload nativo
     const boundary = '-------MEMOTRALCI' + Math.random().toString(36).substring(2)
@@ -1306,14 +1396,139 @@ class GoogleClientSide {
     }
   }
 
+  private isSystemOrIgnoredDriveFile(f: any): boolean {
+    if (!f || !f.name) return true
+    if (f.mimeType === 'application/vnd.google-apps.folder') return true
+    const n = f.name.toLowerCase()
+    if (
+      n === 'tasks.json' ||
+      n === '_tasks_index.json' ||
+      n === '_categories.json' ||
+      n.includes('client secret') ||
+      n.includes('service-account')
+    ) {
+      return true
+    }
+    if (n.startsWith('[') && n.endsWith('.json')) return true
+    return false
+  }
+
+  public async reorganizeDriveFolders(): Promise<void> {
+    if (this.reorganizePromise) return this.reorganizePromise
+
+    this.reorganizePromise = (async () => {
+      try {
+        const rootFolderId = await this.resolveDriveFolderId()
+        const [attachmentsFolderId, voiceFolderId] = await Promise.all([
+          this.resolveAttachmentsArchiveFolderId(),
+          this.resolveVoiceNotesArchiveFolderId(),
+        ])
+
+        // 1. Consolida eventuali duplicati di _categories.json in un unico file
+        try {
+          const catQ = `name = '_categories.json' and trashed = false`
+          const catRes = await this.fetchWithAuth(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+              catQ
+            )}&orderBy=modifiedTime%20desc&fields=files(id,name,parents,modifiedTime)&pageSize=20`
+          )
+          if (catRes.ok) {
+            const catData = await catRes.json()
+            const catFiles: any[] = catData.files || []
+            if (catFiles.length > 0) {
+              const primaryCat = catFiles[0]
+              // Sposta il file principale nella cartella root se era altrove
+              const currentParents: string[] = Array.isArray(primaryCat.parents)
+                ? primaryCat.parents
+                : []
+              if (rootFolderId && !currentParents.includes(rootFolderId)) {
+                const removeParam =
+                  currentParents.length > 0
+                    ? `&removeParents=${encodeURIComponent(currentParents.join(','))}`
+                    : ''
+                await this.fetchWithAuth(
+                  `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
+                    primaryCat.id
+                  )}?addParents=${encodeURIComponent(rootFolderId)}${removeParam}`,
+                  { method: 'PATCH' }
+                ).catch(() => {})
+              }
+
+              // Elimina (sposta nel cestino) eventuali copie duplicate più vecchie
+              for (const dup of catFiles.slice(1)) {
+                if (!dup?.id) continue
+                await this.fetchWithAuth(
+                  `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(dup.id)}`,
+                  {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ trashed: true }),
+                  }
+                ).catch(() => {})
+              }
+            }
+          }
+        } catch {}
+
+        // 2. Sposta eventuali allegati e note vocali sparsi nella root nelle rispettive sottocartelle
+        // (PATCH su parents mantiene esattamente lo stesso file.id e tutti i link!)
+        const rootQuery = `'${rootFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`
+        const rootRes = await this.fetchWithAuth(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+            rootQuery
+          )}&fields=files(id,name,mimeType,parents)&pageSize=100`
+        )
+        if (rootRes.ok) {
+          const rootData = await rootRes.json()
+          const looseFiles: any[] = rootData.files || []
+          for (const f of looseFiles) {
+            if (this.isSystemOrIgnoredDriveFile(f)) continue
+            const targetFolderId = this.isVoiceNoteFile(f.mimeType, f.name)
+              ? voiceFolderId
+              : attachmentsFolderId
+            if (!targetFolderId || targetFolderId === rootFolderId) continue
+
+            await this.fetchWithAuth(
+              `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(
+                f.id
+              )}?addParents=${encodeURIComponent(targetFolderId)}&removeParents=${encodeURIComponent(
+                rootFolderId
+              )}`,
+              { method: 'PATCH' }
+            ).catch(() => {})
+          }
+        }
+      } catch (e) {
+        console.warn('[Google Drive] Riorganizzazione cartelle non completata:', e)
+      } finally {
+        this.reorganizePromise = null
+      }
+    })()
+
+    return this.reorganizePromise
+  }
+
   public async listDriveFiles(): Promise<UploadedAttachment[]> {
-    const folderId = await this.resolveDriveFolderId()
-    const query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`
+    const rootFolderId = await this.resolveDriveFolderId()
+    const [attachmentsFolderId, voiceFolderId] = await Promise.all([
+      this.resolveAttachmentsArchiveFolderId(),
+      this.resolveVoiceNotesArchiveFolderId(),
+    ])
+
+    // Esegui riorganizzazione sicura in background se non ancora fatta in questa sessione
+    if (!sessionStorage.getItem('memotralci_drive_reorganized_v1')) {
+      sessionStorage.setItem('memotralci_drive_reorganized_v1', 'true')
+      this.reorganizeDriveFolders().catch(() => {})
+    }
+
+    const folderIds = Array.from(new Set([attachmentsFolderId, voiceFolderId, rootFolderId]))
+    const parentClause = folderIds.map((id) => `'${id}' in parents`).join(' or ')
+    const query = `(${parentClause}) and trashed = false and mimeType != 'application/vnd.google-apps.folder'`
 
     const res = await this.fetchWithAuth(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
         query
-      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties)&pageSize=100&orderBy=createdTime%20desc`
+      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties)&pageSize=200&orderBy=createdTime%20desc`
     )
 
     if (!res.ok) return []
@@ -1321,23 +1536,12 @@ class GoogleClientSide {
     const data = await res.json()
     const files: any[] = data.files || []
 
-    // Filtra in modo rigoroso per mostrare SOLO gli allegati veri:
-    // Esclude cartelle, file di sistema dei task e credenziali
+    // Deduplica per id ed esclude cartelle, file di sistema dei task e credenziali
+    const seen = new Set<string>()
     const realFiles = files.filter((f) => {
-      if (!f || !f.name) return false
-      if (f.mimeType === 'application/vnd.google-apps.folder') return false
-      const n = f.name.toLowerCase()
-      if (
-        n === 'tasks.json' ||
-        n === '_tasks_index.json' ||
-        n === '_categories.json' ||
-        n.includes('client secret') ||
-        n.includes('service-account')
-      ) {
-        return false
-      }
-      if (n.startsWith('[') && n.endsWith('.json')) return false
-      return true
+      if (!f?.id || seen.has(f.id)) return false
+      seen.add(f.id)
+      return !this.isSystemOrIgnoredDriveFile(f)
     })
 
     return realFiles.map((f) => {
@@ -1725,6 +1929,22 @@ class GoogleClientSide {
   /**
    * Elimina fisicamente un file da Google Drive (es. allegato eliminato da un task)
    */
+  public async fetchDriveFileBlob(fileId: string, mimeType?: string): Promise<Blob | null> {
+    try {
+      const res = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`
+      )
+      if (!res.ok) return null
+      const rawBlob = await res.blob()
+      if (mimeType && (!rawBlob.type || rawBlob.type === 'application/octet-stream')) {
+        return new Blob([rawBlob], { type: mimeType })
+      }
+      return rawBlob
+    } catch {
+      return null
+    }
+  }
+
   public async deleteDriveFile(fileId: string): Promise<boolean> {
     if (!fileId) return false
     try {
@@ -1843,50 +2063,80 @@ class GoogleClientSide {
    * Salva o aggiorna le categorie nel cloud sia su Google Drive (_categories.json) sia nei metadati del Calendario condiviso
    */
   public async saveDriveCategories(payload: CategoriesCloudPayload): Promise<void> {
-    // 1. Salva su Google Drive (_categories.json con fallback automatico se la cartella non è scrivibile con drive.file)
-    const drivePromise = (async () => {
-      try {
-        const folderId = await this.resolveDriveFolderId()
-        await this.uploadOrUpdateJsonFile(
-          folderId,
-          '_categories.json',
-          payload,
-          'Categorie personalizzate MemoTralci (sincronizzate multi-dispositivo v2)'
-        )
-      } catch (e) {
-        console.warn('[Google Drive Categories] Errore salvataggio categorie su Drive:', e)
-      }
-    })()
+    // Mutex sequenziale per evitare creazione di copie duplicate su salvataggi ravvicinati
+    this.saveCategoriesMutex = this.saveCategoriesMutex.then(async () => {
+      // 1. Salva sempre su un UNICO file _categories.json su Google Drive (cestinando eventuali duplicati)
+      const drivePromise = (async () => {
+        try {
+          const folderId = await this.resolveDriveFolderId()
+          await this.uploadOrUpdateJsonFile(
+            folderId,
+            '_categories.json',
+            payload,
+            'Categorie personalizzate MemoTralci (sincronizzate multi-dispositivo v2)'
+          )
 
-    // 2. Salva mirror nei metadati del calendario Google condiviso ("Segreteria")
-    const calendarPromise = (async () => {
-      try {
-        const calId = await this.resolveCalendarId()
-        const calRes = await this.fetchWithAuth(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`
-        )
-        let baseDesc = ''
-        if (calRes.ok) {
-          const calData = await calRes.json()
-          baseDesc = (calData.description || '').replace(/\s*\[MEMOTRALCI_CATS_V2:.+?\]/s, '').trim()
-        }
-        const tag = `[MEMOTRALCI_CATS_V2:${JSON.stringify(payload)}]`
-        const newDesc = baseDesc ? `${baseDesc}\n\n${tag}` : tag
-
-        await this.fetchWithAuth(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ description: newDesc }),
+          // Pulizia eventuali duplicati residui di _categories.json
+          const catQ = `name = '_categories.json' and trashed = false`
+          const catRes = await this.fetchWithAuth(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+              catQ
+            )}&orderBy=modifiedTime%20desc&fields=files(id)&pageSize=10`
+          )
+          if (catRes.ok) {
+            const catData = await catRes.json()
+            const list: any[] = catData.files || []
+            for (const dup of list.slice(1)) {
+              if (!dup?.id) continue
+              await this.fetchWithAuth(
+                `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(dup.id)}`,
+                {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ trashed: true }),
+                }
+              ).catch(() => {})
+            }
           }
-        )
-      } catch (e) {
-        console.warn('[Google Calendar Categories Mirror] Errore salvataggio metadati calendario:', e)
-      }
-    })()
+        } catch (e) {
+          console.warn('[Google Drive Categories] Errore salvataggio categorie su Drive:', e)
+        }
+      })()
 
-    await Promise.allSettled([drivePromise, calendarPromise])
+      // 2. Salva mirror nei metadati del calendario Google condiviso ("Segreteria")
+      const calendarPromise = (async () => {
+        try {
+          const calId = await this.resolveCalendarId()
+          const calRes = await this.fetchWithAuth(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`
+          )
+          let baseDesc = ''
+          if (calRes.ok) {
+            const calData = await calRes.json()
+            baseDesc = (calData.description || '')
+              .replace(/\s*\[MEMOTRALCI_CATS_V2:.+?\]/s, '')
+              .trim()
+          }
+          const tag = `[MEMOTRALCI_CATS_V2:${JSON.stringify(payload)}]`
+          const newDesc = baseDesc ? `${baseDesc}\n\n${tag}` : tag
+
+          await this.fetchWithAuth(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ description: newDesc }),
+            }
+          )
+        } catch (e) {
+          console.warn('[Google Calendar Categories Mirror] Errore salvataggio metadati calendario:', e)
+        }
+      })()
+
+      await Promise.allSettled([drivePromise, calendarPromise])
+    })
+
+    return this.saveCategoriesMutex
   }
 }
 

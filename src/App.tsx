@@ -8,6 +8,10 @@ import { TaskModal } from './components/TaskModal.tsx'
 import { AttachmentModal } from './components/AttachmentModal.tsx'
 import { GoogleSettingsModal } from './components/GoogleSettingsModal.tsx'
 import { PwaInstallBanner } from './components/PwaInstallBanner.tsx'
+import {
+  UpcomingDeadlinesModal,
+  getTomorrowDeadlinesCount,
+} from './components/UpcomingDeadlinesModal.tsx'
 import type { AppCalendarEvent } from './types/event.ts'
 import type { AppTaskItem } from './types/task.ts'
 import type { UploadedAttachment } from './types/attachment.ts'
@@ -17,6 +21,25 @@ import { categoryService } from './services/categoryService.ts'
 import { notificationService } from './services/notifications.ts'
 import { Loader2, CheckCircle } from 'lucide-react'
 import { APP_VERSION, APP_CREDITS } from './config/version.ts'
+
+function normalizeTaskCategories(task: AppTaskItem): string[] {
+  if (Array.isArray(task.categories) && task.categories.length > 0) {
+    return task.categories.filter((c) => c && c.trim().length > 0 && c.trim().toLowerCase() !== 'altro')
+  }
+  if (typeof task.category === 'string' && task.category.trim()) {
+    return task.category
+      .split(',')
+      .map((s) => s.trim())
+      .filter((c) => Boolean(c) && c.toLowerCase() !== 'altro')
+  }
+  return []
+}
+
+function sameCategoryLists(a?: string[], b?: string[]): boolean {
+  const listA = [...(a || [])].sort()
+  const listB = [...(b || [])].sort()
+  return listA.length === listB.length && listA.every((v, i) => v === listB[i])
+}
 
 export function App() {
   const [currentView, setCurrentView] = useState<NavView>('calendar')
@@ -74,6 +97,7 @@ export function App() {
 
   const [isGoogleSettingsOpen, setIsGoogleSettingsOpen] = useState(false)
   const [previewAttachment, setPreviewAttachment] = useState<any | null>(null)
+  const [isDeadlinesOpen, setIsDeadlinesOpen] = useState(false)
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
@@ -132,10 +156,45 @@ export function App() {
       setGoogleStatus(status)
       setEvents(fetchedEvents)
       setTasks(fetchedTasks)
-      setAttachments(fetchedAttachments)
+
+      // Eredita la categoria dal task associato se l'allegato non ha ancora categorie assegnate
+      const taskCatByAttId = new Map<string, string[]>()
+      for (const t of fetchedTasks) {
+        const tCats = normalizeTaskCategories(t)
+        if (tCats.length > 0 && Array.isArray(t.attachments)) {
+          for (const att of t.attachments) {
+            if (att?.id && !taskCatByAttId.has(att.id)) {
+              taskCatByAttId.set(att.id, tCats)
+            }
+          }
+        }
+      }
+      const syncedAttachments = fetchedAttachments.map((att) => {
+        const existingCats = Array.isArray(att.categories) ? att.categories : []
+        if (existingCats.length === 0 && taskCatByAttId.has(att.id)) {
+          const inherited = taskCatByAttId.get(att.id)!
+          return {
+            ...att,
+            categories: inherited,
+            category: inherited.join(','),
+          }
+        }
+        return att
+      })
+      setAttachments(syncedAttachments)
 
       // Check upcoming event & task reminders
       notificationService.checkReminders(fetchedEvents, fetchedTasks)
+
+      // Apri automaticamente l'elenco scadenze se ci sono impegni/task previsti per domani (una volta per sessione)
+      const tomorrowCount = getTomorrowDeadlinesCount(fetchedEvents, fetchedTasks)
+      if (tomorrowCount > 0) {
+        const todayKey = `memotralci_deadlines_auto_${new Date().toISOString().slice(0, 10)}`
+        if (!sessionStorage.getItem(todayKey)) {
+          sessionStorage.setItem(todayKey, 'true')
+          setIsDeadlinesOpen(true)
+        }
+      }
 
       if (showSyncIndicator) {
         const calName = status.resolvedCalendar || status.calendarId || 'Google Calendar'
@@ -168,9 +227,9 @@ export function App() {
     }
 
     // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
-    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_1_0')
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_2_0')
     if (!sessionCacheCleared || justConnected) {
-      sessionStorage.setItem('memotralci_cache_cleared_v2_1_0', 'true')
+      sessionStorage.setItem('memotralci_cache_cleared_v2_2_0', 'true')
       loadAllData(justConnected, true)
     } else {
       loadAllData()
@@ -252,6 +311,11 @@ export function App() {
   }
 
   async function handleSaveTask(task: AppTaskItem) {
+    const prevTask = tasks.find((t) => t.id === task.id)
+    const prevCats = prevTask ? normalizeTaskCategories(prevTask) : []
+    const nextCats = normalizeTaskCategories(task)
+    const catsChanged = !sameCategoryLists(prevCats, nextCats)
+
     const saved = await api.saveTask(task)
     setTasks((prev) => {
       const exists = prev.some((t) => t.id === task.id)
@@ -262,10 +326,26 @@ export function App() {
     })
 
     if (saved.attachments && saved.attachments.length > 0) {
+      const attachedIds = new Set(saved.attachments.map((a) => a.id))
+
       setAttachments((prev) => {
-        const existingIds = new Set(prev.map((a) => a.id))
+        const existingMap = new Map(prev.map((a) => [a.id, a]))
+        const updatedPrev = prev.map((att) => {
+          if (!attachedIds.has(att.id)) return att
+          // Se la categoria del task è cambiata, o se il task ha categorie e l'allegato è vuoto, aggiorna l'allegato
+          const currentAttCats = Array.isArray(att.categories) ? att.categories : []
+          const shouldSync =
+            catsChanged || (nextCats.length > 0 && currentAttCats.length === 0)
+          if (!shouldSync) return att
+          return {
+            ...att,
+            categories: nextCats,
+            category: nextCats.length > 0 ? nextCats.join(',') : undefined,
+          }
+        })
+
         const newOnes = saved.attachments!
-          .filter((a) => !existingIds.has(a.id))
+          .filter((a) => !existingMap.has(a.id))
           .map((a) => ({
             id: a.id,
             name: a.name,
@@ -275,9 +355,21 @@ export function App() {
             webContentLink: a.webContentLink,
             createdTime: new Date().toISOString(),
             isLocal: a.isLocal,
+            categories: nextCats,
+            category: nextCats.length > 0 ? nextCats.join(',') : undefined,
           }))
-        return [...newOnes, ...prev]
+
+        return [...newOnes, ...updatedPrev]
       })
+
+      // Persisti su IndexedDB / Google Drive le categorie aggiornate degli allegati associati
+      for (const att of saved.attachments) {
+        const existingAtt = attachments.find((a) => a.id === att.id)
+        const currentAttCats = Array.isArray(existingAtt?.categories) ? existingAtt!.categories : []
+        if (catsChanged || !existingAtt || (nextCats.length > 0 && currentAttCats.length === 0)) {
+          api.updateAttachmentCategories(att.id, nextCats).catch(() => {})
+        }
+      }
     }
   }
 
@@ -333,6 +425,8 @@ export function App() {
 
   async function handleUpdateAttachmentCategories(id: string, categories: string[]) {
     const cleanCats = categories.filter((c) => c && c.trim().length > 0)
+
+    // 1. Aggiorna l'allegato
     setAttachments((prev) =>
       prev.map((a) =>
         a.id === id
@@ -341,6 +435,50 @@ export function App() {
       )
     )
     await api.updateAttachmentCategories(id, cleanCats)
+
+    // 2. Se l'allegato è associato a uno o più task, aggiorna in automatico la categoria anche sul task (e sugli altri suoi allegati)
+    const linkedTasks = tasks.filter((t) => t.attachments?.some((a) => a.id === id))
+    if (linkedTasks.length > 0) {
+      const siblingAttIds = new Set<string>()
+      const updatedTasksList: AppTaskItem[] = []
+
+      for (const lt of linkedTasks) {
+        const updatedTask: AppTaskItem = {
+          ...lt,
+          categories: cleanCats,
+          category: cleanCats.length > 0 ? cleanCats.join(',') : undefined,
+          updatedAt: new Date().toISOString(),
+        }
+        updatedTasksList.push(updatedTask)
+        lt.attachments?.forEach((a) => {
+          if (a.id !== id) siblingAttIds.add(a.id)
+        })
+      }
+
+      const updatedTaskMap = new Map(updatedTasksList.map((t) => [t.id, t]))
+      setTasks((prev) => prev.map((t) => updatedTaskMap.get(t.id) || t))
+
+      if (siblingAttIds.size > 0) {
+        setAttachments((prev) =>
+          prev.map((a) =>
+            siblingAttIds.has(a.id)
+              ? {
+                  ...a,
+                  categories: cleanCats,
+                  category: cleanCats.length > 0 ? cleanCats.join(',') : undefined,
+                }
+              : a
+          )
+        )
+      }
+
+      for (const ut of updatedTasksList) {
+        api.saveTask(ut).catch(() => {})
+      }
+      for (const sibId of siblingAttIds) {
+        api.updateAttachmentCategories(sibId, cleanCats).catch(() => {})
+      }
+    }
   }
 
   async function handleDeleteAttachment(id: string) {
@@ -371,6 +509,8 @@ export function App() {
         onToggleDark={handleToggleDark}
         onSync={handleManualSync}
         isSyncing={isSyncing}
+        onOpenDeadlines={() => setIsDeadlinesOpen(true)}
+        tomorrowDeadlinesCount={getTomorrowDeadlinesCount(events, tasks)}
       />
 
       {/* Main Container */}
@@ -482,6 +622,15 @@ export function App() {
           onClose={() => setPreviewAttachment(null)}
         />
       )}
+
+      <UpcomingDeadlinesModal
+        isOpen={isDeadlinesOpen}
+        onClose={() => setIsDeadlinesOpen(false)}
+        events={events}
+        tasks={tasks}
+        onSelectEvent={(evt) => handleOpenEventModal(evt)}
+        onSelectTask={(t) => handleOpenTaskModal(t)}
+      />
 
       {/* Sync Toast Feedback */}
       {syncNotice && (
