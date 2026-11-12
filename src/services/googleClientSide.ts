@@ -6,6 +6,7 @@ import type { AppCalendarEvent } from '../types/event.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import type { CategoriesCloudPayload } from '../types/category.ts'
+import { localDB } from './db.ts'
 
 export interface GoogleUserInfo {
   id?: string
@@ -26,6 +27,7 @@ export const GOOGLE_DEFAULTS = {
   scopes: [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
@@ -36,10 +38,24 @@ export const GOOGLE_DEFAULTS = {
 const STORAGE_KEYS = {
   TOKEN: 'memotralci_google_token',
   TOKEN_EXPIRES: 'memotralci_google_token_exp',
+  REFRESH_TOKEN: 'memotralci_google_refresh_token',
+  CLIENT_SECRET: 'memotralci_google_client_secret',
   USER: 'memotralci_google_user',
+  EXPLICIT_LOGOUT: 'memotralci_google_explicit_logout',
   CALENDAR_ID: 'memotralci_resolved_cal_id',
   FOLDER_ID: 'memotralci_resolved_folder_id',
   TASK_FOLDER_ID: 'memotralci_task_folder_id',
+  RECENT_EVENTS: 'memotralci_recent_events_v2',
+  DELETED_EVENTS: 'memotralci_deleted_events_v2',
+}
+
+// Helper per spostare una data YYYY-MM-DD di +N o -N giorni (per end.date esclusivo di Google Calendar)
+function shiftDateOnly(dateStr: string, days: number): string {
+  const clean = dateStr.split('T')[0]
+  const parts = clean.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(isNaN)) return clean
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + days))
+  return dt.toISOString().split('T')[0]
 }
 
 class GoogleClientSide {
@@ -55,27 +71,90 @@ class GoogleClientSide {
     this.cachedFolderId = localStorage.getItem(STORAGE_KEYS.FOLDER_ID)
     this.cachedTaskFolderId = localStorage.getItem(STORAGE_KEYS.TASK_FOLDER_ID)
 
+    this.restoreSessionFromIndexedDB()
     this.setupLifecycleListeners()
     this.scheduleAutoRefresh()
   }
 
-  // Monitora visibilità pagina e focus per rinnovare automaticamente il token
+  // Ripristina o sincronizza la sessione persistente salvata in IndexedDB per evitare disconnessioni
+  private async restoreSessionFromIndexedDB() {
+    try {
+      const explicitLogout = localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true'
+      const savedSession = await localDB.getAuthSession()
+
+      if (savedSession?.explicitlyDisconnected || explicitLogout) {
+        return
+      }
+
+      if (savedSession) {
+        if (!localStorage.getItem(STORAGE_KEYS.USER) && savedSession.user) {
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(savedSession.user))
+        }
+        if (!localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) && savedSession.refreshToken) {
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, savedSession.refreshToken)
+        }
+        if (
+          !localStorage.getItem(STORAGE_KEYS.TOKEN) &&
+          savedSession.token &&
+          savedSession.tokenExpires &&
+          savedSession.tokenExpires > Date.now()
+        ) {
+          localStorage.setItem(STORAGE_KEYS.TOKEN, savedSession.token)
+          localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRES, String(savedSession.tokenExpires))
+        }
+      }
+
+      const currentRefresh = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+      const currentUser = this.getUserInfo()
+      if (currentUser || currentRefresh) {
+        await this.persistSessionToIndexedDB()
+      }
+
+      // Se il token di accesso è assente o in scadenza, rinnovalo subito silenziosamente via HTTP
+      if (!this.getToken() && this.isConnected()) {
+        this.silentRefreshToken().catch(() => {})
+      }
+    } catch (e) {
+      console.warn('[Google Auth] Errore ripristino sessione da IndexedDB:', e)
+    }
+  }
+
+  private async persistSessionToIndexedDB() {
+    try {
+      const user = this.getUserInfo()
+      const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+      const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
+      const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+      const explicitlyDisconnected = localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true'
+
+      await localDB.saveAuthSession({
+        token,
+        tokenExpires: exp ? Number(exp) : null,
+        refreshToken,
+        user,
+        calendarId: this.cachedCalendarId,
+        folderId: this.cachedFolderId,
+        taskFolderId: this.cachedTaskFolderId,
+        explicitlyDisconnected,
+      })
+    } catch {}
+  }
+
+  // Monitora visibilità pagina, ritorno online e focus per rinnovare automaticamente il token
   private setupLifecycleListeners() {
     if (typeof window === 'undefined') return
 
     const checkAndRefresh = () => {
+      if (!this.isConnected()) return
       const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
-      const user = this.getUserInfo()
-      if (user && exp) {
-        const timeUntilExp = Number(exp) - Date.now()
-        // Se mancano meno di 10 minuti o è già scaduto, rinnova silenziosamente
-        if (timeUntilExp < 10 * 60 * 1000) {
-          this.silentRefreshToken().catch(() => {})
-        }
+      const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+      if (!token || !exp || Number(exp) - Date.now() < 15 * 60 * 1000) {
+        this.silentRefreshToken().catch(() => {})
       }
     }
 
     window.addEventListener('focus', checkAndRefresh)
+    window.addEventListener('online', checkAndRefresh)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         checkAndRefresh()
@@ -112,28 +191,46 @@ class GoogleClientSide {
     return this.gisPromise
   }
 
-  // Verifica se è presente un token o una sessione salvata valida
+  // Verifica se è presente un account collegato (non si sgancia mai alla scadenza oraria del token!)
   public isConnected(): boolean {
+    try {
+      if (localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true') {
+        return false
+      }
+    } catch {}
+
     const token = this.getToken()
     if (token && token.trim().length > 10) return true
 
-    // Se abbiamo l'utente memorizzato ma il token è in fase di scadenza, la sessione è attiva
+    const refreshToken = this.getRefreshToken()
     const user = this.getUserInfo()
-    if (user && user.email) {
+    if ((user && user.email) || refreshToken) {
       this.silentRefreshToken().catch(() => {})
       return true
     }
     return false
   }
 
+  public getRefreshToken(): string | null {
+    try {
+      if (localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true') return null
+      const saved = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+      if (saved && saved.trim().length > 10) return saved.trim()
+      return null
+    } catch {
+      return null
+    }
+  }
+
   public getToken(): string | null {
     try {
+      if (localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true') return null
       const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
       const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
       if (exp) {
         const expNum = Number(exp)
-        // Se mancano meno di 5 minuti, avvia il rinnovo in background
-        if (Date.now() > expNum - 5 * 60 * 1000) {
+        // Se mancano meno di 10 minuti, avvia il rinnovo in background
+        if (Date.now() > expNum - 10 * 60 * 1000) {
           this.silentRefreshToken().catch(() => {})
         }
         if (Date.now() > expNum) {
@@ -150,81 +247,149 @@ class GoogleClientSide {
     const current = this.getToken()
     if (current) return current
 
-    // Se scaduto, tenta il rinnovo silenzioso immediato
-    const user = this.getUserInfo()
-    if (user) {
+    // Se scaduto o mancante, rinnova immediatamente (tramite refresh_token HTTP senza popup)
+    if (this.isConnected()) {
       return await this.silentRefreshToken()
     }
     return null
   }
 
-  public setToken(token: string, expiresInSeconds: number = 3600) {
+  public setToken(token: string, expiresInSeconds: number = 3600, refreshToken?: string) {
     try {
+      localStorage.removeItem(STORAGE_KEYS.EXPLICIT_LOGOUT)
       localStorage.setItem(STORAGE_KEYS.TOKEN, token.trim())
-      // Scadenza calcolata con margine di sicurezza
-      const expTime = Date.now() + Math.max(300, expiresInSeconds - 60) * 1000
+      const expTime = Date.now() + Math.max(300, expiresInSeconds - 90) * 1000
       localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRES, String(expTime))
+      if (refreshToken && refreshToken.trim().length > 10) {
+        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken.trim())
+      }
+      this.persistSessionToIndexedDB()
       this.scheduleAutoRefresh(expiresInSeconds)
     } catch (e) {
       console.warn('Errore salvataggio token:', e)
     }
   }
 
-  // Programma il rinnovo automatico circa 5 minuti prima della scadenza
+  // Programma il rinnovo automatico prima della scadenza
   public scheduleAutoRefresh(expiresInSeconds?: number) {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer)
       this.refreshTimer = null
     }
 
-    let delayMs = 50 * 60 * 1000 // Default 50 minuti
+    let delayMs = 45 * 60 * 1000 // Default 45 minuti
     if (expiresInSeconds && expiresInSeconds > 600) {
       delayMs = (expiresInSeconds - 300) * 1000
     } else {
       const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
       if (exp) {
-        delayMs = Math.max(30000, Number(exp) - Date.now() - 300000)
+        delayMs = Math.max(15000, Number(exp) - Date.now() - 300000)
       }
     }
 
     this.refreshTimer = setTimeout(() => {
       this.silentRefreshToken().catch((err) => {
-        console.warn('[Google GIS] Rinnovo schedulato fallito:', err)
+        console.warn('[Google Auth] Rinnovo schedulato fallito:', err)
       })
     }, delayMs)
   }
 
+  // Invalida solo l'access_token scaduto SENZA MAI cancellare l'account utente o il refresh_token!
+  private invalidateExpiredAccessToken() {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.TOKEN)
+      localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES)
+    } catch {}
+  }
+
+  // Chiamato SOLO quando l'utente clicca esplicitamente su "Disconnetti"
   public clearToken() {
     try {
       if (this.refreshTimer) {
         clearTimeout(this.refreshTimer)
         this.refreshTimer = null
       }
+      localStorage.setItem(STORAGE_KEYS.EXPLICIT_LOGOUT, 'true')
       localStorage.removeItem(STORAGE_KEYS.TOKEN)
       localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES)
+      localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
       localStorage.removeItem(STORAGE_KEYS.USER)
       localStorage.removeItem(STORAGE_KEYS.TASK_FOLDER_ID)
       this.cachedCalendarId = null
       this.cachedFolderId = null
       this.cachedTaskFolderId = null
+      localDB.clearAuthSession().catch(() => {})
     } catch {}
   }
 
   public getUserInfo(): GoogleUserInfo | null {
     try {
+      if (localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true') return null
       const data = localStorage.getItem(STORAGE_KEYS.USER)
-      return data ? JSON.parse(data) : null
+      if (data) return JSON.parse(data)
+      if (localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)) {
+        return {
+          email: GOOGLE_DEFAULTS.calendarEmail,
+          name: 'Segreteria Come Tralci',
+        }
+      }
+      return null
     } catch {
       return null
     }
   }
 
-  // Rinnovo Silenzioso del Token in Background senza popup e senza interruzioni
+  // Rinnovo Silenzioso del Token in Background:
+  // 1) Canale Primario: HTTP POST diretto se sono presenti credenziali di refresh in locale
+  // 2) Canale Secondario: GIS Token Client silenzioso
   public async silentRefreshToken(): Promise<string | null> {
     if (this.refreshPromise) return this.refreshPromise
 
     this.refreshPromise = (async () => {
       try {
+        // 1. Tenta prima il rinnovo diretto tramite refresh_token salvato localmente (se presente)
+        const refreshToken = this.getRefreshToken()
+        const clientSecret = localStorage.getItem(STORAGE_KEYS.CLIENT_SECRET)
+        if (refreshToken && GOOGLE_DEFAULTS.clientId && clientSecret) {
+          try {
+            const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: new URLSearchParams({
+                client_id: GOOGLE_DEFAULTS.clientId,
+                client_secret: clientSecret,
+                refresh_token: refreshToken,
+                grant_type: 'refresh_token',
+              }),
+            })
+
+            if (tokenRes.ok) {
+              const tokenData = await tokenRes.json()
+              if (tokenData && tokenData.access_token) {
+                const newAccessToken = tokenData.access_token
+                const expiresIn = tokenData.expires_in ? Number(tokenData.expires_in) : 3600
+                this.setToken(newAccessToken, expiresIn, refreshToken)
+
+                // Se non avevamo ancora i dettagli profilo, salvali
+                if (!localStorage.getItem(STORAGE_KEYS.USER)) {
+                  const defaultUser: GoogleUserInfo = {
+                    email: GOOGLE_DEFAULTS.calendarEmail,
+                    name: 'Segreteria Come Tralci',
+                  }
+                  localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(defaultUser))
+                  this.persistSessionToIndexedDB()
+                }
+                return newAccessToken
+              }
+            }
+          } catch (httpErr) {
+            console.warn('[Google OAuth2] Errore temporaneo rete durante refresh HTTP:', httpErr)
+          }
+        }
+
+        // 2. Fallback GIS client-side
         await this.loadGis()
         const user = this.getUserInfo()
         const oauth2 = (window as any).google?.accounts?.oauth2
@@ -235,7 +400,6 @@ class GoogleClientSide {
           const timeout = setTimeout(() => {
             if (!resolved) {
               resolved = true
-              console.warn('[Google GIS] Timeout rinnovo silenzioso token')
               resolve(null)
             }
           }, 8000)
@@ -252,28 +416,24 @@ class GoogleClientSide {
                   const token = resp.access_token
                   const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600
                   this.setToken(token, expiresIn)
-                  console.info('[Google GIS] Token rinnovato con successo in background!')
                   resolve(token)
                 } else {
-                  console.warn('[Google GIS] Risposta rinnovo silenzioso non valida:', resp)
                   resolve(null)
                 }
               },
-              error_callback: (err: any) => {
+              error_callback: () => {
                 if (resolved) return
                 resolved = true
                 clearTimeout(timeout)
-                console.warn('[Google GIS] Errore silent refresh:', err)
                 resolve(null)
               },
             })
 
-            // Richiesta silenziosa senza prompt all'utente
             client.requestAccessToken({
               prompt: '',
               hint: user?.email || GOOGLE_DEFAULTS.calendarEmail,
             })
-          } catch (e) {
+          } catch {
             if (!resolved) {
               resolved = true
               clearTimeout(timeout)
@@ -289,7 +449,7 @@ class GoogleClientSide {
     return this.refreshPromise
   }
 
-  // Esegue fetch verso le API Google gestendo automaticamente il rinnovo del token su 401
+  // Esegue fetch verso le API Google gestendo automaticamente il rinnovo del token su 401 SENZA MAI scollegare l'account
   private async fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
     let token = await this.getValidToken()
     if (!token) {
@@ -303,26 +463,117 @@ class GoogleClientSide {
 
     let res = await fetch(url, { ...init, headers })
 
-    // Se riceviamo 401 Unauthorized, tenta il rinnovo immediato del token e riprova una volta
+    // Se riceviamo 401 Unauthorized, invalida SOLO l'access_token scaduto, rinnova con refresh_token e riprova
     if (res.status === 401) {
-      console.info('[Google API] Ricevuto 401, tentativo di rinnovo immediato del token...')
+      console.info('[Google API] Token scaduto (401), rinnovo automatico in corso...')
+      this.invalidateExpiredAccessToken()
       const refreshed = await this.silentRefreshToken()
       if (refreshed) {
         headers.set('Authorization', `Bearer ${refreshed}`)
         res = await fetch(url, { ...init, headers })
       } else {
-        console.warn('[Google API] Impossibile rinnovare il token. Sessione scaduta.')
-        this.clearToken()
+        console.warn('[Google API] Rinnovo posticipato (account mantenuto in locale).')
       }
     }
 
     return res
   }
 
-  // Richiesta Token OAuth via GIS Popup (primo accesso o ri-login esplicito)
+  // Richiesta Accesso Google e memorizzazione permanente dell'account + refresh_token in locale
   public async signIn(): Promise<{ token: string; user: GoogleUserInfo }> {
+    localStorage.removeItem(STORAGE_KEYS.EXPLICIT_LOGOUT)
+
+    // Se abbiamo il refresh_token preconfigurato della Segreteria, tenta prima il collegamento istantaneo
+    // oppure procedi con il popup OAuth per acquisire/aggiornare il refresh_token permanente
     await this.loadGis()
 
+    return new Promise((resolve, reject) => {
+      try {
+        const oauth2 = (window as any).google.accounts.oauth2
+        const clientSecret = localStorage.getItem(STORAGE_KEYS.CLIENT_SECRET)
+
+        // Usa Code Client per ottenere anche il refresh_token permanente (offline access) se configurato in locale
+        if (oauth2.initCodeClient && clientSecret) {
+          const codeClient = oauth2.initCodeClient({
+            client_id: GOOGLE_DEFAULTS.clientId,
+            scope: GOOGLE_DEFAULTS.scopes,
+            ux_mode: 'popup',
+            select_account: true,
+            callback: async (codeResp: any) => {
+              if (codeResp && codeResp.code) {
+                try {
+                  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                      client_id: GOOGLE_DEFAULTS.clientId,
+                      client_secret: clientSecret,
+                      code: codeResp.code,
+                      grant_type: 'authorization_code',
+                      redirect_uri: 'postmessage',
+                    }),
+                  })
+
+                  if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json()
+                    const token = tokenData.access_token
+                    const expiresIn = tokenData.expires_in ? Number(tokenData.expires_in) : 3600
+                    const refreshToken =
+                      tokenData.refresh_token ||
+                      localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) ||
+                      undefined
+
+                    this.setToken(token, expiresIn, refreshToken)
+
+                    let user: GoogleUserInfo = {
+                      email: GOOGLE_DEFAULTS.calendarEmail,
+                      name: 'Segreteria Come Tralci',
+                    }
+                    try {
+                      const uRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                        headers: { Authorization: `Bearer ${token}` },
+                      })
+                      if (uRes.ok) {
+                        user = await uRes.json()
+                      }
+                    } catch {}
+
+                    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
+                    await this.persistSessionToIndexedDB()
+
+                    try {
+                      await this.resolveCalendarId()
+                      await this.resolveDriveFolderId()
+                    } catch {}
+
+                    resolve({ token, user })
+                    return
+                  }
+                } catch (err) {
+                  console.warn('Scambio codice OAuth fallito, uso token client:', err)
+                }
+              }
+
+              // Fallback automatico a TokenClient se lo scambio codice non è riuscito
+              this.signInWithTokenClient().then(resolve).catch(reject)
+            },
+            error_callback: () => {
+              this.signInWithTokenClient().then(resolve).catch(reject)
+            },
+          })
+
+          codeClient.requestCode()
+          return
+        }
+
+        this.signInWithTokenClient().then(resolve).catch(reject)
+      } catch (err: any) {
+        reject(err)
+      }
+    })
+  }
+
+  private signInWithTokenClient(): Promise<{ token: string; user: GoogleUserInfo }> {
     return new Promise((resolve, reject) => {
       try {
         const client = (window as any).google.accounts.oauth2.initTokenClient({
@@ -332,23 +583,25 @@ class GoogleClientSide {
             if (resp && resp.access_token) {
               const token = resp.access_token
               const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600
-              this.setToken(token, expiresIn)
+              const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) || undefined
+              this.setToken(token, expiresIn, refreshToken)
 
-              // Fetch User Profile
-              let user: GoogleUserInfo = { email: GOOGLE_DEFAULTS.calendarEmail, name: 'Segreteria' }
+              let user: GoogleUserInfo = {
+                email: GOOGLE_DEFAULTS.calendarEmail,
+                name: 'Segreteria Come Tralci',
+              }
               try {
                 const uRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
                   headers: { Authorization: `Bearer ${token}` },
                 })
                 if (uRes.ok) {
                   user = await uRes.json()
-                  localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
                 }
-              } catch (e) {
-                console.warn('Recupero info utente Google fallito:', e)
-              }
+              } catch {}
 
-              // Pre-risolvi calendario e cartella drive
+              localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
+              await this.persistSessionToIndexedDB()
+
               try {
                 await this.resolveCalendarId()
                 await this.resolveDriveFolderId()
@@ -377,6 +630,71 @@ class GoogleClientSide {
   }
 
   // ==========================================
+  // BUFFER EVENTI RECENTI E TOMBSTONES
+  // (Previene la scomparsa degli eventi appena creati su Google Calendar durante il sync)
+  // ==========================================
+
+  private rememberRecentEvent(evt: AppCalendarEvent) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.RECENT_EVENTS)
+      const map: Record<string, { event: AppCalendarEvent; savedAt: number }> = raw ? JSON.parse(raw) : {}
+      const now = Date.now()
+      // Pulisci voci più vecchie di 10 minuti
+      for (const k of Object.keys(map)) {
+        if (now - map[k].savedAt > 10 * 60 * 1000) {
+          delete map[k]
+        }
+      }
+      map[evt.id] = { event: evt, savedAt: now }
+      localStorage.setItem(STORAGE_KEYS.RECENT_EVENTS, JSON.stringify(map))
+    } catch {}
+  }
+
+  private getRecentEvents(): AppCalendarEvent[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.RECENT_EVENTS)
+      if (!raw) return []
+      const map: Record<string, { event: AppCalendarEvent; savedAt: number }> = JSON.parse(raw)
+      const now = Date.now()
+      const valid: AppCalendarEvent[] = []
+      for (const k of Object.keys(map)) {
+        if (now - map[k].savedAt <= 10 * 60 * 1000 && map[k].event) {
+          valid.push(map[k].event)
+        }
+      }
+      return valid
+    } catch {
+      return []
+    }
+  }
+
+  private removeRecentEvent(id: string) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.RECENT_EVENTS)
+      if (raw) {
+        const map = JSON.parse(raw)
+        delete map[id]
+        localStorage.setItem(STORAGE_KEYS.RECENT_EVENTS, JSON.stringify(map))
+      }
+      const delRaw = localStorage.getItem(STORAGE_KEYS.DELETED_EVENTS)
+      const delArr: string[] = delRaw ? JSON.parse(delRaw) : []
+      if (!delArr.includes(id)) {
+        delArr.push(id)
+        localStorage.setItem(STORAGE_KEYS.DELETED_EVENTS, JSON.stringify(delArr.slice(-200)))
+      }
+    } catch {}
+  }
+
+  private getDeletedEventIds(): Set<string> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.DELETED_EVENTS)
+      return raw ? new Set(JSON.parse(raw)) : new Set()
+    } catch {
+      return new Set()
+    }
+  }
+
+  // ==========================================
   // GOOGLE CALENDAR DIRECT INTEGRATION
   // ==========================================
 
@@ -384,7 +702,9 @@ class GoogleClientSide {
     if (this.cachedCalendarId) return this.cachedCalendarId
 
     try {
-      const res = await this.fetchWithAuth('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100')
+      const res = await this.fetchWithAuth(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100'
+      )
 
       if (res.ok) {
         const data = await res.json()
@@ -401,6 +721,7 @@ class GoogleClientSide {
         if (found && found.id) {
           this.cachedCalendarId = found.id
           localStorage.setItem(STORAGE_KEYS.CALENDAR_ID, found.id)
+          this.persistSessionToIndexedDB()
           return found.id
         }
       }
@@ -408,103 +729,136 @@ class GoogleClientSide {
       console.warn('[Google Calendar] Risoluzione id calendario fallita:', e)
     }
 
-    return 'primary'
+    return GOOGLE_DEFAULTS.calendarEmail || 'primary'
   }
 
   public async getCalendarEvents(): Promise<AppCalendarEvent[]> {
     const calId = await this.resolveCalendarId()
-    const timeMin = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
-    const timeMax = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    // Intervallo esteso: da 1 anno nel passato fino a 5 anni nel futuro (nessun evento futuro viene mai tagliato fuori!)
+    const timeMin = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+    const timeMax = new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString()
 
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      calId
-    )}/events?maxResults=250&singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(
-      timeMin
-    )}&timeMax=${encodeURIComponent(timeMax)}`
+    const allItems: any[] = []
+    let pageToken: string | undefined = undefined
 
-    const res = await this.fetchWithAuth(url)
+    do {
+      const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+        calId
+      )}/events?maxResults=2500&singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(
+        timeMin
+      )}&timeMax=${encodeURIComponent(timeMax)}${pageParam}`
 
-    if (!res.ok) {
-      throw new Error(`Errore Calendar Google (${res.status}): ${res.statusText}`)
+      const res = await this.fetchWithAuth(url, { cache: 'no-store' })
+
+      if (!res.ok) {
+        throw new Error(`Errore Calendar Google (${res.status}): ${res.statusText}`)
+      }
+
+      const data = await res.json()
+      if (Array.isArray(data.items)) {
+        allItems.push(...data.items)
+      }
+      pageToken = data.nextPageToken
+    } while (pageToken && allItems.length < 5000)
+
+    const deletedIds = this.getDeletedEventIds()
+
+    const mappedEvents: AppCalendarEvent[] = allItems
+      .filter((item) => item && item.status !== 'cancelled' && !deletedIds.has(item.id))
+      .map((item) => {
+        const isAllDay = Boolean(item.start?.date)
+        const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
+        let end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
+
+        // In Google Calendar API v3 end.date per gli eventi allDay è esclusivo (es. 11->12 per il solo giorno 11).
+        // Riportiamolo alla data inclusiva usata nell'interfaccia se è successivo a start.
+        if (isAllDay && item.start?.date && item.end?.date && item.end.date > item.start.date) {
+          end = shiftDateOnly(item.end.date, -1)
+        }
+
+        let category: any = undefined
+        let categories: string[] = []
+        let attachments: any[] = []
+
+        const extProps = item.extendedProperties?.private || item.extendedProperties?.shared
+        if (extProps) {
+          if (extProps.categories) {
+            try {
+              const parsed = JSON.parse(extProps.categories)
+              if (Array.isArray(parsed)) {
+                categories = parsed.filter(
+                  (c: any) => typeof c === 'string' && c.trim() && c.trim().toLowerCase() !== 'altro'
+                )
+              }
+            } catch {}
+          }
+
+          const rawCat = extProps.category
+          if (typeof rawCat === 'string' && rawCat.trim() && rawCat.trim().toLowerCase() !== 'altro') {
+            const splitCats = rawCat
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter((s: string) => Boolean(s) && s.toLowerCase() !== 'altro')
+            for (const sc of splitCats) {
+              if (!categories.includes(sc)) categories.push(sc)
+            }
+          }
+
+          if (categories.length > 0) {
+            category = categories.join(',')
+          }
+
+          if (extProps.attachments) {
+            try {
+              attachments = JSON.parse(extProps.attachments)
+            } catch {
+              attachments = []
+            }
+          }
+        }
+
+        return {
+          id: item.id || `evt_${Date.now()}`,
+          title: item.summary || '(Senza titolo)',
+          description: item.description || '',
+          location: item.location || '',
+          start,
+          end,
+          allDay: isAllDay,
+          category,
+          categories,
+          attachments,
+          googleEventId: item.id,
+        }
+      })
+
+    // Unisci eventuali eventi appena salvati negli ultimi minuti che Google Calendar non avesse ancora indicizzato
+    const recentEvents = this.getRecentEvents()
+    const mappedIds = new Set(mappedEvents.map((e) => e.id))
+    for (const rec of recentEvents) {
+      if (!deletedIds.has(rec.id) && !mappedIds.has(rec.id)) {
+        mappedEvents.push(rec)
+      }
     }
 
-    const data = await res.json()
-    const items: any[] = data.items || []
-
-    return items.map((item) => {
-      const isAllDay = Boolean(item.start?.date)
-      const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
-      const end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
-
-      let category: any = undefined
-      let categories: string[] = []
-      let attachments: any[] = []
-
-      const extProps = item.extendedProperties?.private || item.extendedProperties?.shared
-      if (extProps) {
-        if (extProps.categories) {
-          try {
-            const parsed = JSON.parse(extProps.categories)
-            if (Array.isArray(parsed)) {
-              categories = parsed.filter(
-                (c: any) => typeof c === 'string' && c.trim() && c.trim().toLowerCase() !== 'altro'
-              )
-            }
-          } catch {}
-        }
-
-        const rawCat = extProps.category
-        if (typeof rawCat === 'string' && rawCat.trim() && rawCat.trim().toLowerCase() !== 'altro') {
-          const splitCats = rawCat
-            .split(',')
-            .map((s: string) => s.trim())
-            .filter((s: string) => Boolean(s) && s.toLowerCase() !== 'altro')
-          for (const sc of splitCats) {
-            if (!categories.includes(sc)) categories.push(sc)
-          }
-        }
-
-        if (categories.length > 0) {
-          category = categories.join(',')
-        }
-
-        if (extProps.attachments) {
-          try {
-            attachments = JSON.parse(extProps.attachments)
-          } catch {
-            attachments = []
-          }
-        }
-      }
-
-      return {
-        id: item.id || `evt_${Date.now()}`,
-        title: item.summary || '(Senza titolo)',
-        description: item.description || '',
-        location: item.location || '',
-        start,
-        end,
-        allDay: isAllDay,
-        category,
-        categories,
-        attachments,
-        googleEventId: item.id,
-      }
-    })
+    return mappedEvents
   }
 
   public async createCalendarEvent(eventData: Omit<AppCalendarEvent, 'id'>): Promise<AppCalendarEvent> {
-    const token = this.getToken()
-    if (!token) throw new Error('Account Google non connesso')
-
     const calId = await this.resolveCalendarId()
 
+    const startDateOnly = eventData.start.split('T')[0]
+    const rawEndDateOnly = (eventData.end || eventData.start).split('T')[0]
+    const inclusiveEndDateOnly = rawEndDateOnly < startDateOnly ? startDateOnly : rawEndDateOnly
+
+    // Per eventi "Tutto il giorno" (allDay), Google Calendar richiede end.date esclusivo (+1 giorno)
     const startProp = eventData.allDay
-      ? { date: eventData.start.split('T')[0] }
+      ? { date: startDateOnly }
       : { dateTime: new Date(eventData.start).toISOString() }
     const endProp = eventData.allDay
-      ? { date: eventData.end.split('T')[0] }
-      : { dateTime: new Date(eventData.end).toISOString() }
+      ? { date: shiftDateOnly(inclusiveEndDateOnly, 1) }
+      : { dateTime: new Date(eventData.end || eventData.start).toISOString() }
 
     const catsArray = Array.isArray(eventData.categories)
       ? eventData.categories.filter((c) => c && c.trim() && c.trim().toLowerCase() !== 'altro')
@@ -534,32 +888,38 @@ class GoogleClientSide {
       },
     }
 
-    const res = await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+    const res = await this.fetchWithAuth(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      }
+    )
 
     if (!res.ok) {
       throw new Error(`Errore creazione evento Google Calendar: ${res.statusText}`)
     }
 
     const item = await res.json()
-    return {
+    const createdEvent: AppCalendarEvent = {
       id: item.id,
       title: item.summary || eventData.title,
       description: item.description || eventData.description,
       location: item.location || eventData.location,
-      start: eventData.start,
-      end: eventData.end,
+      start: eventData.allDay ? startDateOnly : item.start?.dateTime || eventData.start,
+      end: eventData.allDay ? inclusiveEndDateOnly : item.end?.dateTime || eventData.end,
       allDay: eventData.allDay,
       category: catStr || undefined,
       categories: catsArray,
       attachments: eventData.attachments,
       googleEventId: item.id,
     }
+
+    this.rememberRecentEvent(createdEvent)
+    return createdEvent
   }
 
   public async updateCalendarEvent(id: string, eventData: Partial<AppCalendarEvent>): Promise<AppCalendarEvent> {
@@ -570,14 +930,18 @@ class GoogleClientSide {
     if (eventData.description !== undefined) patchBody.description = eventData.description
     if (eventData.location !== undefined) patchBody.location = eventData.location
 
+    const startDateOnly = (eventData.start || '').split('T')[0]
+    const rawEndDateOnly = (eventData.end || eventData.start || '').split('T')[0]
+    const inclusiveEndDateOnly = rawEndDateOnly < startDateOnly ? startDateOnly : rawEndDateOnly
+
     if (eventData.start !== undefined || eventData.allDay !== undefined) {
       patchBody.start = eventData.allDay
-        ? { date: (eventData.start || '').split('T')[0] }
+        ? { date: startDateOnly }
         : { dateTime: new Date(eventData.start || new Date()).toISOString() }
     }
     if (eventData.end !== undefined || eventData.allDay !== undefined) {
       patchBody.end = eventData.allDay
-        ? { date: (eventData.end || '').split('T')[0] }
+        ? { date: shiftDateOnly(inclusiveEndDateOnly, 1) }
         : { dateTime: new Date(eventData.end || new Date()).toISOString() }
     }
 
@@ -620,22 +984,27 @@ class GoogleClientSide {
     }
 
     const item = await res.json()
-    return {
+    const isAllDay = Boolean(item.start?.date)
+    const updatedEvent: AppCalendarEvent = {
       id: item.id,
       title: item.summary,
       description: item.description || '',
       location: item.location || '',
-      start: (eventData.allDay ? item.start?.date : item.start?.dateTime) || eventData.start || '',
-      end: (eventData.allDay ? item.end?.date : item.end?.dateTime) || eventData.end || '',
-      allDay: Boolean(item.start?.date),
+      start: isAllDay ? startDateOnly || item.start?.date : item.start?.dateTime || eventData.start || '',
+      end: isAllDay ? inclusiveEndDateOnly || item.end?.date : item.end?.dateTime || eventData.end || '',
+      allDay: isAllDay,
       category: catStr || undefined,
       categories: catsArray,
       attachments: eventData.attachments,
       googleEventId: item.id,
     }
+
+    this.rememberRecentEvent(updatedEvent)
+    return updatedEvent
   }
 
   public async deleteCalendarEvent(id: string): Promise<boolean> {
+    this.removeRecentEvent(id)
     const calId = await this.resolveCalendarId()
     const res = await this.fetchWithAuth(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`,

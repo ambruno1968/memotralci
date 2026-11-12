@@ -163,9 +163,9 @@ export function App() {
     }
 
     // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
-    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_0_0')
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_0_2')
     if (!sessionCacheCleared || justConnected) {
-      sessionStorage.setItem('memotralci_cache_cleared_v2_0_0', 'true')
+      sessionStorage.setItem('memotralci_cache_cleared_v2_0_2', 'true')
       loadAllData(justConnected, true)
     } else {
       loadAllData()
@@ -357,7 +357,7 @@ export function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-3 sm:py-8 overflow-x-hidden">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-28 text-slate-400">
             <Loader2 className="w-12 h-12 animate-spin text-indigo-500 mb-3" />
@@ -402,9 +402,9 @@ export function App() {
       </main>
 
       {/* Footer con Versione e Crediti */}
-      <footer className="mt-auto border-t border-slate-200/60 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 font-medium">
-          <div className="flex items-center space-x-2">
+      <footer className="mt-auto border-t border-slate-200/60 dark:border-slate-800 pt-4 pb-24 md:py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 flex flex-col sm:flex-row items-center justify-between gap-2 font-medium">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:space-x-2">
             <span className="font-bold text-slate-700 dark:text-slate-300">MemoTralci</span>
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
               {APP_VERSION}

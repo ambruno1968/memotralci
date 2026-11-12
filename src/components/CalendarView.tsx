@@ -103,12 +103,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return true
   })
 
+  // Estrae la data locale YYYY-MM-DD anche se la stringa ISO è in formato UTC (Z)
+  function extractLocalDateStr(isoOrDate?: string): string {
+    if (!isoOrDate) return ''
+    if (isoOrDate.length <= 10) return isoOrDate
+    return formatDateSafe(isoOrDate, 'yyyy-MM-dd') || isoOrDate.split('T')[0]
+  }
+
   // Eventi per l'Agenda: solo da OGGI in poi (nasconde gli eventi passati)
   const todayStr = format(new Date(), 'yyyy-MM-dd')
   const upcomingAgendaEvents = filteredEvents
     .filter((e) => {
-      const startDay = e.start.split('T')[0]
-      const endDay = (e.end || e.start).split('T')[0]
+      const startDay = extractLocalDateStr(e.start)
+      const endDay = extractLocalDateStr(e.end || e.start)
       return startDay >= todayStr || endDay >= todayStr
     })
     .sort((a, b) => a.start.localeCompare(b.start))
@@ -129,8 +136,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const dateStr = format(date, 'yyyy-MM-dd')
     return filteredEvents
       .filter((e) => {
-        const eventStartStr = e.start.split('T')[0]
-        const eventEndStr = (e.end || e.start).split('T')[0]
+        const eventStartStr = extractLocalDateStr(e.start)
+        const eventEndStr = extractLocalDateStr(e.end || e.start)
         return eventStartStr === dateStr || (dateStr >= eventStartStr && dateStr <= eventEndStr)
       })
       .sort((a, b) => a.start.localeCompare(b.start))
@@ -147,53 +154,53 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const isCurrentDateToday = isToday(currentDate)
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+    <div className="space-y-4 sm:space-y-6 max-w-6xl mx-auto pb-8 sm:pb-12">
       {/* VIBRANT TOP HERO BANNER CON ILLUSTRAZIONE CALENDARIO */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 sm:p-8 text-white shadow-2xl shadow-indigo-950/20 border border-white/20">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-4 sm:p-8 text-white shadow-2xl shadow-indigo-950/20 border border-white/20">
         {/* Background decorative elements */}
         <div className="absolute -right-8 -bottom-8 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
         <div className="absolute right-12 top-4 w-40 h-40 rounded-full bg-amber-400/20 blur-xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-1.5">
-            <div className="flex items-center space-x-2">
-              <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-black tracking-wider uppercase flex items-center space-x-1 border border-white/30">
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Agenda & Calendario Google</span>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3.5 md:gap-6">
+          <div className="space-y-1 sm:space-y-1.5 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 sm:space-x-2">
+              <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-[10px] sm:text-xs font-black tracking-wider uppercase flex items-center space-x-1 border border-white/30">
+                <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
+                <span className="truncate">Agenda & Calendario Google</span>
               </span>
-              <span className="text-xs font-bold text-indigo-100 capitalize">
+              <span className="text-[11px] sm:text-xs font-bold text-indigo-100 capitalize">
                 {format(new Date(), 'EEEE d MMMM', { locale: it })}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight capitalize text-white drop-shadow-xs">
+            <h1 className="text-xl sm:text-4xl font-black tracking-tight capitalize text-white drop-shadow-xs truncate">
               {mode === 'day'
                 ? format(currentDate, 'EEEE d MMMM yyyy', { locale: it })
                 : format(currentDate, 'MMMM yyyy', { locale: it })}
             </h1>
 
-            <p className="text-xs sm:text-sm text-indigo-100 font-medium max-w-md">
+            <p className="text-[11px] sm:text-sm text-indigo-100 font-medium max-w-md">
               {upcomingAgendaEvents.length} prossimi eventi • {tasks.filter((t) => !t.completed).length} attività da completare • sincronizzazione attiva
             </p>
           </div>
 
           {/* Quick Actions in Hero */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => onOpenEventModal(undefined, format(currentDate, 'yyyy-MM-dd'))}
-              className="flex items-center space-x-2 px-5 py-3 bg-white text-indigo-900 hover:bg-indigo-50 rounded-2xl font-black text-xs shadow-xl transition cursor-pointer transform hover:scale-105 active:scale-95"
+              className="flex items-center space-x-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-white text-indigo-900 hover:bg-indigo-50 rounded-xl sm:rounded-2xl font-black text-xs shadow-xl transition cursor-pointer transform hover:scale-105 active:scale-95"
             >
-              <Plus className="w-4 h-4 text-indigo-600" />
+              <Plus className="w-4 h-4 text-indigo-600 shrink-0" />
               <span>Nuovo Evento</span>
             </button>
 
             {events.length > 0 && (
               <button
                 onClick={() => exportEventsToIcs(events)}
-                className="flex items-center space-x-1.5 px-4 py-3 bg-white/15 hover:bg-white/25 backdrop-blur-md text-white rounded-2xl font-bold text-xs border border-white/30 transition cursor-pointer"
+                className="flex items-center space-x-1.5 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white/15 hover:bg-white/25 backdrop-blur-md text-white rounded-xl sm:rounded-2xl font-bold text-xs border border-white/30 transition cursor-pointer"
                 title="Esporta calendario in formato standard .ics"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">Esporta .ics</span>
               </button>
             )}
@@ -202,41 +209,41 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Calendar Controls Card */}
-      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-4 sm:p-5 rounded-3xl border border-white/80 dark:border-slate-800 shadow-xl shadow-indigo-950/5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/80 dark:border-slate-800 shadow-xl shadow-indigo-950/5 space-y-3 sm:space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           {/* Navigation Oggi / Prev / Next */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-0">
             <button
               onClick={handleToday}
-              className={`px-4 py-2 rounded-2xl border text-xs font-black transition shadow-xs cursor-pointer flex items-center space-x-1.5 ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border text-xs font-black transition shadow-xs cursor-pointer flex items-center space-x-1 sm:space-x-1.5 shrink-0 ${
                 mode === 'day' && isCurrentDateToday
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
                   : 'bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 dark:from-slate-800 dark:to-slate-800 border-indigo-200 dark:border-slate-700 text-indigo-700 dark:text-indigo-300'
               }`}
               title="Visualizza il programma di Oggi"
             >
-              <SunMedium className="w-3.5 h-3.5" />
+              <SunMedium className="w-3.5 h-3.5 shrink-0" />
               <span>Oggi</span>
             </button>
 
-            <div className="flex items-center space-x-1 bg-slate-100/80 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center space-x-0.5 sm:space-x-1 bg-slate-100/80 dark:bg-slate-800 p-0.5 sm:p-1 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 shrink-0">
               <button
                 onClick={handlePrev}
-                className="p-1.5 rounded-xl hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
                 title={mode === 'day' ? 'Giorno precedente' : mode === 'week' ? 'Settimana precedente' : 'Mese precedente'}
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
               <button
                 onClick={handleNext}
-                className="p-1.5 rounded-xl hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
                 title={mode === 'day' ? 'Giorno successivo' : mode === 'week' ? 'Settimana successiva' : 'Mese successivo'}
               >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
-            <span className="text-sm sm:text-lg font-black text-slate-800 dark:text-white capitalize pl-1">
+            <span className="text-xs sm:text-lg font-black text-slate-800 dark:text-white capitalize pl-1 truncate min-w-0">
               {mode === 'day'
                 ? format(currentDate, 'EEEE d MMMM yyyy', { locale: it })
                 : format(currentDate, 'MMMM yyyy', { locale: it })}
@@ -244,50 +251,50 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* View Mode Switcher (Giorno, Mese, Settimana, Agenda) */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-inner">
+          <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-inner w-full sm:w-auto">
             <button
               onClick={() => setMode('day')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center justify-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer min-w-0 ${
                 mode === 'day'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <SunMedium className="w-3.5 h-3.5" />
-              <span>Giorno</span>
+              <SunMedium className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Giorno</span>
             </button>
             <button
               onClick={() => setMode('month')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center justify-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer min-w-0 ${
                 mode === 'month'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <CalendarDays className="w-3.5 h-3.5" />
-              <span>Mese</span>
+              <CalendarDays className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Mese</span>
             </button>
             <button
               onClick={() => setMode('week')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center justify-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer min-w-0 ${
                 mode === 'week'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Columns3 className="w-3.5 h-3.5" />
-              <span>Settimana</span>
+              <Columns3 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Settimana</span>
             </button>
             <button
               onClick={() => setMode('agenda')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center justify-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer min-w-0 ${
                 mode === 'agenda'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <List className="w-3.5 h-3.5" />
-              <span>Agenda</span>
+              <List className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Agenda</span>
             </button>
           </div>
         </div>
@@ -588,7 +595,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <div
                   key={day.toISOString()}
                   onClick={() => onOpenEventModal(undefined, dateStr)}
-                  className={`min-h-[115px] sm:min-h-[140px] p-2 transition group flex flex-col justify-between hover:bg-indigo-50/40 dark:hover:bg-slate-800/60 cursor-pointer ${
+                  className={`min-h-[82px] sm:min-h-[140px] p-1 sm:p-2 transition group flex flex-col justify-between hover:bg-indigo-50/40 dark:hover:bg-slate-800/60 cursor-pointer min-w-0 ${
                     !isCurrMonth
                       ? 'bg-slate-50/40 dark:bg-slate-950/50 opacity-35'
                       : isWeekend
@@ -597,7 +604,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   }`}
                 >
                   {/* Top cell row */}
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -606,7 +613,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         setMode('day')
                       }}
                       title="Apri vista giornaliera per questa data"
-                      className={`text-xs font-black w-7 h-7 flex items-center justify-center rounded-xl transition cursor-pointer ${
+                      className={`text-[11px] sm:text-xs font-black w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg sm:rounded-xl transition cursor-pointer ${
                         isDayToday
                           ? 'bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/40 ring-2 ring-purple-300 dark:ring-purple-600'
                           : 'text-slate-800 dark:text-slate-200 hover:bg-indigo-100 dark:hover:bg-slate-700 group-hover:text-indigo-600'
@@ -702,8 +709,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
       {/* 2. WEEK VIEW */}
       {mode === 'week' && (
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-white/80 dark:border-slate-800 shadow-xl shadow-indigo-950/5 overflow-hidden">
-          <div className="grid grid-cols-7 divide-x divide-slate-100 dark:divide-slate-800">
+        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-white/80 dark:border-slate-800 shadow-xl shadow-indigo-950/5 overflow-x-auto">
+          <div className="grid grid-cols-7 divide-x divide-slate-100 dark:divide-slate-800 min-w-[540px] sm:min-w-0">
             {weekDays.map((day) => {
               const dayEvents = getEventsOnDay(day)
               const dayTasks = getTasksOnDay(day)

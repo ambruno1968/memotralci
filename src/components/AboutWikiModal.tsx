@@ -30,8 +30,8 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-5 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-200 safe-top safe-bottom">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 flex flex-col max-h-[88dvh] sm:max-h-[92vh] overflow-hidden">
         {/* Header con chiusura rapida */}
         <div className="relative pt-6 pb-4 px-6 border-b border-slate-100 dark:border-slate-800 text-center bg-gradient-to-b from-teal-50/50 to-transparent dark:from-teal-950/20">
           <button

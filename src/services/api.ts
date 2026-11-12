@@ -230,14 +230,41 @@ export const api = {
 
   // Events - Direct Google Calendar Sync
   async getEvents(): Promise<AppCalendarEvent[]> {
+    const existingLocal = await localDB.getAllEvents()
+    const pendingLocalEvents = existingLocal.filter((e) => e.id.startsWith('local_evt_'))
+
     // 1. Direct Client-Side Google Calendar Fetch
     if (googleClientSide.isConnected()) {
       try {
+        // Se c'erano eventi creati offline localmente, sincronizzali ora su Google Calendar
+        const newlySynced: AppCalendarEvent[] = []
+        for (const pending of pendingLocalEvents) {
+          try {
+            const { id: _oldId, ...evtPayload } = pending
+            const uploaded = await googleClientSide.createCalendarEvent(evtPayload)
+            await localDB.deleteEvent(pending.id)
+            newlySynced.push(uploaded)
+          } catch {
+            newlySynced.push(pending)
+          }
+        }
+
         const googleEvents = await googleClientSide.getCalendarEvents()
-        await localDB.saveEvents(googleEvents)
-        return googleEvents
+        const googleIds = new Set(googleEvents.map((e) => e.id))
+        const merged = [...googleEvents]
+        for (const item of newlySynced) {
+          if (!googleIds.has(item.id)) {
+            merged.push(item)
+          }
+        }
+
+        await localDB.saveEvents(merged)
+        return merged
       } catch (err) {
         console.warn('[Google Client] Errore lettura eventi da Google Calendar, uso database locale:', err)
+        if (existingLocal.length > 0) {
+          return existingLocal
+        }
       }
     }
 
@@ -246,14 +273,16 @@ export const api = {
       const res = await fetch('/api/events', { signal: AbortSignal.timeout(4000) })
       if (res.ok) {
         const events: AppCalendarEvent[] = await res.json()
-        await localDB.saveEvents(events)
-        return events
+        const serverIds = new Set(events.map((e) => e.id))
+        const merged = [...events, ...pendingLocalEvents.filter((p) => !serverIds.has(p.id))]
+        await localDB.saveEvents(merged)
+        return merged
       }
     } catch {
       // Fallback a database locale
     }
 
-    return localDB.getAllEvents()
+    return existingLocal
   },
 
   async createEvent(eventData: Omit<AppCalendarEvent, 'id'>): Promise<AppCalendarEvent> {

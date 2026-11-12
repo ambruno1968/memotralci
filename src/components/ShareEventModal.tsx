@@ -422,11 +422,11 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-[110] flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-150 safe-top safe-bottom"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-white/60 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]"
+        className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-white/60 dark:border-slate-800 overflow-hidden flex flex-col max-h-[88dvh] sm:max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Close Button */}

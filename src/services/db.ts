@@ -3,6 +3,19 @@ import type { AppCalendarEvent } from '../types/event.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
 
+interface AuthSessionRecord {
+  id: string
+  token?: string | null
+  tokenExpires?: number | null
+  refreshToken?: string | null
+  user?: any | null
+  calendarId?: string | null
+  folderId?: string | null
+  taskFolderId?: string | null
+  explicitlyDisconnected?: boolean
+  updatedAt: number
+}
+
 interface MemoTralciDB extends DBSchema {
   events: {
     key: string
@@ -20,13 +33,17 @@ interface MemoTralciDB extends DBSchema {
     key: string
     value: { id: string; dataUrl: string; name: string; type: string }
   }
+  authSession: {
+    key: string
+    value: AuthSessionRecord
+  }
 }
 
 let dbPromise: Promise<IDBPDatabase<MemoTralciDB>> | null = null
 
 function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<MemoTralciDB>('memotralci_pwa_db', 1, {
+    dbPromise = openDB<MemoTralciDB>('memotralci_pwa_db', 2, {
       upgrade(db) {
         if (!db.objectStoreNames.contains('events')) {
           db.createObjectStore('events', { keyPath: 'id' })
@@ -39,6 +56,9 @@ function getDB() {
         }
         if (!db.objectStoreNames.contains('cachedFiles')) {
           db.createObjectStore('cachedFiles', { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains('authSession')) {
+          db.createObjectStore('authSession', { keyPath: 'id' })
         }
       },
     })
@@ -59,6 +79,7 @@ export const localDB = {
   async saveEvents(events: AppCalendarEvent[]): Promise<void> {
     const db = await getDB()
     const tx = db.transaction('events', 'readwrite')
+    await tx.store.clear()
     for (const evt of events) {
       await tx.store.put(evt)
     }
@@ -127,6 +148,44 @@ export const localDB = {
   async clearCachedFiles(): Promise<void> {
     const db = await getDB()
     await db.clear('cachedFiles')
+  },
+
+  // Persistenza sessione Account Google in IndexedDB (anti-disconnessione)
+  async saveAuthSession(session: Omit<AuthSessionRecord, 'id' | 'updatedAt'>): Promise<void> {
+    try {
+      const db = await getDB()
+      const existing = await db.get('authSession', 'google_account')
+      await db.put('authSession', {
+        ...(existing || {}),
+        ...session,
+        id: 'google_account',
+        updatedAt: Date.now(),
+      })
+    } catch (e) {
+      console.warn('[DB] Errore salvataggio authSession in IndexedDB:', e)
+    }
+  },
+  async getAuthSession(): Promise<AuthSessionRecord | undefined> {
+    try {
+      const db = await getDB()
+      return await db.get('authSession', 'google_account')
+    } catch {
+      return undefined
+    }
+  },
+  async clearAuthSession(): Promise<void> {
+    try {
+      const db = await getDB()
+      await db.put('authSession', {
+        id: 'google_account',
+        token: null,
+        tokenExpires: null,
+        refreshToken: null,
+        user: null,
+        explicitlyDisconnected: true,
+        updatedAt: Date.now(),
+      })
+    } catch {}
   },
 
   // Export & Import full backup

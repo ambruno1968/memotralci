@@ -53,27 +53,27 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       {/* Desktop & Tablet Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/90 dark:border-slate-800 shadow-sm transition-colors duration-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/90 dark:border-slate-800 shadow-sm transition-colors duration-200 safe-top safe-x">
+        <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5">
           {/* Brand Logo con apertura crediti e wiki al click */}
           <div
-            className="flex items-center space-x-3 cursor-pointer group select-none"
+            className="flex items-center space-x-2 sm:space-x-3 cursor-pointer group select-none min-w-0 shrink"
             onClick={() => setIsAboutOpen(true)}
             title="Clicca per visualizzare logo ingrandito, crediti, versione e piccola wiki"
           >
-            <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-110 group-active:scale-95 transition ring-2 ring-teal-500/40 flex items-center justify-center bg-white dark:bg-slate-800 shrink-0">
+            <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-105 group-active:scale-95 transition ring-2 ring-teal-500/40 flex items-center justify-center bg-white dark:bg-slate-800 shrink-0">
               <img
                 src={appLogo}
                 alt="MemoTralci"
                 className="w-full h-full object-cover"
               />
             </div>
-            <div>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent group-hover:opacity-90">
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1 sm:space-x-1.5">
+                <span className="text-sm sm:text-base font-black tracking-tight bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-600 dark:from-teal-300 dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent group-hover:opacity-90 truncate">
                   MemoTralci
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-teal-100/90 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800/80 group-hover:border-teal-400 transition">
+                <span className="text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded-md bg-teal-100/90 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800/80 group-hover:border-teal-400 transition shrink-0">
                   {APP_VERSION}
                 </span>
               </div>
@@ -133,12 +133,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Right Action buttons */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             {/* Dark Mode Switcher */}
             <button
               type="button"
               onClick={onToggleDark}
-              className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shadow-xs cursor-pointer"
+              className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shadow-xs cursor-pointer"
               title={isDark ? 'Passa al tema Chiaro' : 'Passa al tema Scuro'}
               aria-label="Toggle tema scuro/chiaro"
             >
@@ -167,7 +167,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={onSync}
                 disabled={isSyncing}
-                className={`p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 transition shadow-xs cursor-pointer ${
+                className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 transition shadow-xs cursor-pointer ${
                   isSyncing ? 'opacity-60 cursor-not-allowed' : ''
                 }`}
                 title="Sincronizza subito in entrambe le direzioni con Google Calendar e Drive"
@@ -184,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Google Sync Status Pill */}
             <button
               onClick={onOpenGoogleSettings}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-2xl border text-xs font-bold transition shadow-xs cursor-pointer ${
+              className={`flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border text-[11px] sm:text-xs font-bold transition shadow-xs cursor-pointer ${
                 googleStatus.isGoogleConfigured
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
                   : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
@@ -212,8 +212,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 safe-bottom shadow-lg">
-        <div className="grid grid-cols-3 py-2 px-3">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 safe-bottom safe-x shadow-lg">
+        <div className="grid grid-cols-3 py-1.5 px-2">
           <button
             onClick={() => onSelectView('calendar')}
             className={`flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-bold transition ${

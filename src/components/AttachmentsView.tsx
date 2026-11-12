@@ -63,14 +63,14 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 rounded-3xl p-6 sm:p-7 text-white shadow-2xl shadow-indigo-950/20 border border-white/20">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+      <div className="relative overflow-hidden bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 rounded-2xl sm:rounded-3xl p-4 sm:p-7 text-white shadow-2xl shadow-indigo-950/20 border border-white/20">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-3.5 sm:mb-5">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center space-x-2.5">
+            <h1 className="text-xl sm:text-3xl font-black tracking-tight flex items-center space-x-2">
               <span>Gestione Allegati & Documenti</span>
-              <Paperclip className="w-6 h-6 text-indigo-200" />
+              <Paperclip className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-200 shrink-0" />
             </h1>
-            <p className="text-indigo-100 text-xs sm:text-sm mt-1 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-indigo-100 text-[11px] sm:text-sm mt-1 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
               <span>{realAttachments.length} documenti e allegati archiviati</span>
               <span>•</span>
               <span>

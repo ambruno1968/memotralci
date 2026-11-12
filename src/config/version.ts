@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.0.0'
+export const APP_VERSION = 'v2.0.2'
 
 export interface AppCredits {
   appName: string
@@ -25,8 +25,8 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.0.0',
-  releaseDate: '11 Novembre 2026',
+  version: '2.0.2',
+  releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
   organization: 'Associazione Come Tralci - Novara',
@@ -36,6 +36,28 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.0.2',
+    date: '12/11/2026',
+    title: 'Ottimizzazione Responsive Mobile per Schermi Stretti e Corti',
+    type: 'patch',
+    changes: [
+      'Aggiunto supporto nativo safe-area (safe-top, safe-bottom, safe-x) alla testata e alle barre fisse per evitare il taglio superiore sotto la status bar/notch in modalità PWA.',
+      'Ottimizzati spaziature, pulsanti e selettori vista (Giorno, Mese, Settimana, Agenda) per adattarsi perfettamente anche a smartphone con schermo stretto (320px–375px) senza sbordamenti laterali.',
+      'Adattate tutte le finestre modali con altezza dinamica (88dvh) e celle calendario compatte per evitare tagli su smartphone con display più corto.',
+    ],
+  },
+  {
+    version: '2.0.1',
+    date: '12/11/2026',
+    title: 'Connessione Google/Drive Permanente in Locale e Persistenza Completa Eventi in Agenda',
+    type: 'patch',
+    changes: [
+      'Memorizzazione permanente in locale (localStorage + IndexedDB) dell\'account Google e del Refresh Token OAuth2: la connessione a Google Drive e Calendar non si sgancia più dopo ore o giorni di inattività.',
+      'Rinnovo automatico diretto via HTTPS (grant_type=refresh_token) senza popup e rimozione dello scollegamento forzato in caso di scadenza oraria del token.',
+      'Risolta la scomparsa dalla vista Agenda/Calendario degli eventi salvati su Google Calendar: esteso l\'orizzonte di lettura fino a 5 anni nel futuro (fino a 2500 eventi per pagina con paginazione completa), aggiunto buffer locale anti-latenza e gestione nativa delle date per eventi Tutto il giorno.',
+    ],
+  },
   {
     version: '2.0.0',
     date: '11/11/2026',

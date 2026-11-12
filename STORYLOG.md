@@ -7,6 +7,30 @@
 
 ---
 
+## [v2.0.2] — 12 Novembre 2026
+### 📱 Ottimizzazione Responsive Mobile per Schermi Stretti e Corti
+- **Testata (`Navbar`) e Safe Area PWA (`safe-top`, `safe-bottom`, `safe-x`):**
+  - Aggiunto il rispetto automatico delle aree sicure superiori, inferiori e laterali (`env(safe-area-inset-*)`) per evitare che la barra di stato o il notch del telefono coprano la parte alta della testata.
+  - Compattati spaziatura, logo, badge versione e pulsanti rapidi in testata per schermi stretti (`320px–375px`).
+- **Selettori Calendario, Griglie e Task senza tagli laterali:**
+  - I 4 selettori vista (*Giorno, Mese, Settimana, Agenda*) e i filtri attività (*Da fare, Completate, Tutte*) sono ora disposti in griglia fluida su mobile, evitando qualsiasi taglio sul bordo destro.
+  - Celle della vista mensile ridimensionate per display più corti e scorrimento fluido per la vista settimanale.
+- **Finestre Modali e Altezza Dinamica (`dvh`):**
+  - Tutte le modali utilizzano ora `max-h-[88dvh]` con testata e piè di pagina compatti e bloccati (`shrink-0`), mantenendo sempre visibili i pulsanti di salvataggio e chiusura anche sugli schermi più bassi.
+
+---
+
+## [v2.0.1] — 12 Novembre 2026
+### 🛠️ Fix Connessione Permanente Account Google/Drive e Persistenza Eventi in Agenda
+- **Memorizzazione permanente dell'account Google in locale (`localStorage` + `IndexedDB`):**
+  - Risolto il problema per cui dopo alcune ore di inattività la connessione a Google Drive e Calendar si sganciava (causato dalla scadenza oraria dell'`access_token` combinata con la chiamata a `clearToken()` sui `401`).
+  - L'account utente e il `refresh_token` OAuth2 sono ora salvati in modo permanente sia in `localStorage` sia nello store dedicato `authSession` di `IndexedDB`, e il rinnovo avviene via richiesta diretta HTTPS (`grant_type=refresh_token` verso `oauth2.googleapis.com/token`) senza alcun popup e senza mai scollegare l'account.
+- **Risolta la scomparsa dalla vista Agenda/Calendario degli eventi salvati su Google Calendar:**
+  - Esteso l'intervallo di lettura di Google Calendar da `180 giorni` a **5 anni nel futuro** (`-365 giorni` / `+1825 giorni`) con `maxResults=2500` e paginazione completa (`nextPageToken`), così gli eventi programmati nei mesi/anni successivi (es. Giugno/Settembre 2027) non vengono più rimossi dalla vista al primo ciclo di sincronizzazione.
+  - Rimosso il controllo sincrono bloccante `getToken()` in `createCalendarEvent`, aggiunto buffer locale anti-latenza per gli eventi appena creati/modificati e gestione nativa di `end.date` esclusivo per gli eventi *Tutto il giorno*.
+
+---
+
 ## [v2.0.0] — 11 Novembre 2026
 ### 🚀 Major Release 2.0: Vista Giornaliera (Oggi), Condivisione WhatsApp con Logo e Agenda Futura
 - **Suddivisione Calendario per OGGI / Giorno (`day`):**

@@ -145,6 +145,14 @@ export async function listAvailableCalendars(): Promise<
   }
 }
 
+function shiftDateOnly(dateStr: string, days: number): string {
+  const clean = dateStr.split('T')[0]
+  const parts = clean.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(isNaN)) return clean
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + days))
+  return dt.toISOString().split('T')[0]
+}
+
 export async function listCalendarEvents(
   timeMin?: string,
   timeMax?: string
@@ -156,46 +164,73 @@ export async function listCalendarEvents(
       const calId = await resolveCalendarId(calendar)
       const response = await calendar.events.list({
         calendarId: calId,
-        timeMin: timeMin || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-        timeMax: timeMax || new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+        timeMin: timeMin || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+        timeMax: timeMax || new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString(),
         singleEvents: true,
         orderBy: 'startTime',
-        maxResults: 500,
+        maxResults: 2500,
       })
 
       const items = response.data.items || []
-      const googleEvents: AppCalendarEvent[] = items.map((item: any) => {
-        const isAllDay = Boolean(item.start?.date)
-        const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
-        const end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
+      const googleEvents: AppCalendarEvent[] = items
+        .filter((item: any) => item && item.status !== 'cancelled')
+        .map((item: any) => {
+          const isAllDay = Boolean(item.start?.date)
+          const start = (isAllDay ? item.start?.date : item.start?.dateTime) || new Date().toISOString()
+          let end = (isAllDay ? item.end?.date : item.end?.dateTime) || start
 
-        let category: any = 'altro'
-        let attachments: any[] = []
+          if (isAllDay && item.start?.date && item.end?.date && item.end.date > item.start.date) {
+            end = shiftDateOnly(item.end.date, -1)
+          }
 
-        if (item.extendedProperties?.private) {
-          category = item.extendedProperties.private.category || 'altro'
-          if (item.extendedProperties.private.attachments) {
-            try {
-              attachments = JSON.parse(item.extendedProperties.private.attachments)
-            } catch {
-              attachments = []
+          let category: any = undefined
+          let categories: string[] = []
+          let attachments: any[] = []
+
+          const extProps = item.extendedProperties?.private || item.extendedProperties?.shared
+          if (extProps) {
+            if (extProps.categories) {
+              try {
+                const parsed = JSON.parse(extProps.categories)
+                if (Array.isArray(parsed)) {
+                  categories = parsed.filter(
+                    (c: any) => typeof c === 'string' && c.trim() && c.trim().toLowerCase() !== 'altro'
+                  )
+                }
+              } catch {}
+            }
+            const rawCat = extProps.category
+            if (typeof rawCat === 'string' && rawCat.trim() && rawCat.trim().toLowerCase() !== 'altro') {
+              for (const sc of rawCat.split(',').map((s: string) => s.trim()).filter(Boolean)) {
+                if (sc.toLowerCase() !== 'altro' && !categories.includes(sc)) categories.push(sc)
+              }
+            }
+            if (categories.length > 0) {
+              category = categories.join(',')
+            }
+            if (extProps.attachments) {
+              try {
+                attachments = JSON.parse(extProps.attachments)
+              } catch {
+                attachments = []
+              }
             }
           }
-        }
 
-        return {
-          id: item.id || `evt_${Date.now()}`,
-          title: item.summary || '(Nessun titolo)',
-          description: item.description || '',
-          location: item.location || '',
-          start,
-          end,
-          allDay: isAllDay,
-          category,
-          attachments,
-          googleEventId: item.id || undefined,
-        }
-      })
+          return {
+            id: item.id || `evt_${Date.now()}`,
+            title: item.summary || '(Nessun titolo)',
+            description: item.description || '',
+            location: item.location || '',
+            start,
+            end,
+            allDay: isAllDay,
+            category,
+            categories,
+            attachments,
+            googleEventId: item.id || undefined,
+          } as AppCalendarEvent
+        })
 
       // Update local storage cache with latest Google events
       writeLocalEvents(googleEvents)
