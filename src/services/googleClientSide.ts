@@ -65,6 +65,7 @@ class GoogleClientSide {
   private cachedTaskFolderId: string | null = null
   private refreshTimer: any = null
   private refreshPromise: Promise<string | null> | null = null
+  public lastAuthError: boolean = false
 
   constructor() {
     this.cachedCalendarId = localStorage.getItem(STORAGE_KEYS.CALENDAR_ID)
@@ -469,11 +470,15 @@ class GoogleClientSide {
       this.invalidateExpiredAccessToken()
       const refreshed = await this.silentRefreshToken()
       if (refreshed) {
+        this.lastAuthError = false
         headers.set('Authorization', `Bearer ${refreshed}`)
         res = await fetch(url, { ...init, headers })
       } else {
+        this.lastAuthError = true
         console.warn('[Google API] Rinnovo posticipato (account mantenuto in locale).')
       }
+    } else if (res.ok) {
+      this.lastAuthError = false
     }
 
     return res
@@ -732,12 +737,52 @@ class GoogleClientSide {
     return GOOGLE_DEFAULTS.calendarEmail || 'primary'
   }
 
-  public async getCalendarEvents(): Promise<AppCalendarEvent[]> {
-    const calId = await this.resolveCalendarId()
-    // Intervallo esteso: da 1 anno nel passato fino a 5 anni nel futuro (nessun evento futuro viene mai tagliato fuori!)
-    const timeMin = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
-    const timeMax = new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString()
+  // Restituisce tutti gli ID calendario rilevanti (es. "Segreteria" + "primary") per non perdere mai
+  // eventi creati direttamente su Google Calendar dal telefono o dal web
+  private async resolveRelevantCalendarIds(): Promise<string[]> {
+    const primaryCalId = await this.resolveCalendarId()
+    const ids = new Set<string>([primaryCalId])
 
+    try {
+      const res = await this.fetchWithAuth(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100'
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const items: any[] = data.items || []
+        const target = GOOGLE_DEFAULTS.calendarName.toLowerCase()
+
+        for (const c of items) {
+          if (!c?.id) continue
+          // Ignora calendari di sistema (festività, compleanni contatti)
+          if (c.id.includes('#holiday@') || c.id.includes('#contacts@')) continue
+
+          const summary = (c.summary || '').toLowerCase()
+          const idLower = c.id.toLowerCase()
+          const isRelevant =
+            c.primary === true ||
+            summary.includes(target) ||
+            idLower.includes('segreteria') ||
+            idLower === GOOGLE_DEFAULTS.calendarEmail.toLowerCase()
+
+          if (isRelevant) {
+            ids.add(c.id)
+          }
+        }
+      }
+    } catch {
+      // Se calendarList fallisce, aggiungi comunque 'primary' come fallback oltre a primaryCalId
+      ids.add('primary')
+    }
+
+    return Array.from(ids)
+  }
+
+  private async fetchEventsFromSingleCalendar(
+    calId: string,
+    timeMin: string,
+    timeMax: string
+  ): Promise<any[]> {
     const allItems: any[] = []
     let pageToken: string | undefined = undefined
 
@@ -757,10 +802,48 @@ class GoogleClientSide {
 
       const data = await res.json()
       if (Array.isArray(data.items)) {
-        allItems.push(...data.items)
+        for (const item of data.items) {
+          allItems.push({ ...item, __calendarId: calId })
+        }
       }
       pageToken = data.nextPageToken
     } while (pageToken && allItems.length < 5000)
+
+    return allItems
+  }
+
+  public async getCalendarEvents(): Promise<AppCalendarEvent[]> {
+    const calendarIds = await this.resolveRelevantCalendarIds()
+    // Intervallo esteso: da 1 anno nel passato fino a 5 anni nel futuro (nessun evento futuro viene mai tagliato fuori!)
+    const timeMin = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+    const timeMax = new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString()
+
+    const results = await Promise.allSettled(
+      calendarIds.map((cId) => this.fetchEventsFromSingleCalendar(cId, timeMin, timeMax))
+    )
+
+    const allItems: any[] = []
+    const seenIds = new Set<string>()
+    let anySuccess = false
+    let firstError: any = null
+
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        anySuccess = true
+        for (const item of r.value) {
+          if (item?.id && !seenIds.has(item.id)) {
+            seenIds.add(item.id)
+            allItems.push(item)
+          }
+        }
+      } else if (!firstError) {
+        firstError = r.reason
+      }
+    }
+
+    if (!anySuccess && firstError) {
+      throw firstError
+    }
 
     const deletedIds = this.getDeletedEventIds()
 
@@ -830,6 +913,7 @@ class GoogleClientSide {
           categories,
           attachments,
           googleEventId: item.id,
+          calendarId: item.__calendarId,
         }
       })
 
@@ -923,7 +1007,7 @@ class GoogleClientSide {
   }
 
   public async updateCalendarEvent(id: string, eventData: Partial<AppCalendarEvent>): Promise<AppCalendarEvent> {
-    const calId = await this.resolveCalendarId()
+    const calId = eventData.calendarId || (await this.resolveCalendarId())
 
     const patchBody: any = {}
     if (eventData.title !== undefined) patchBody.summary = eventData.title
@@ -968,7 +1052,7 @@ class GoogleClientSide {
       }
     }
 
-    const res = await this.fetchWithAuth(
+    let res = await this.fetchWithAuth(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
@@ -978,6 +1062,29 @@ class GoogleClientSide {
         body: JSON.stringify(patchBody),
       }
     )
+
+    let usedCalId = calId
+    if (res.status === 404) {
+      const candidates = await this.resolveRelevantCalendarIds()
+      for (const altCalId of candidates) {
+        if (altCalId === calId) continue
+        const retryRes = await this.fetchWithAuth(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(altCalId)}/events/${encodeURIComponent(id)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(patchBody),
+          }
+        )
+        if (retryRes.ok) {
+          res = retryRes
+          usedCalId = altCalId
+          break
+        }
+      }
+    }
 
     if (!res.ok) {
       throw new Error(`Errore aggiornamento evento Google: ${res.statusText}`)
@@ -997,6 +1104,7 @@ class GoogleClientSide {
       categories: catsArray,
       attachments: eventData.attachments,
       googleEventId: item.id,
+      calendarId: usedCalId,
     }
 
     this.rememberRecentEvent(updatedEvent)
@@ -1005,13 +1113,30 @@ class GoogleClientSide {
 
   public async deleteCalendarEvent(id: string): Promise<boolean> {
     this.removeRecentEvent(id)
-    const calId = await this.resolveCalendarId()
+    const allLocal = await localDB.getAllEvents()
+    const matched = allLocal.find((e) => e.id === id)
+    const calId = matched?.calendarId || (await this.resolveCalendarId())
+
     const res = await this.fetchWithAuth(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
       }
     )
+
+    if (res.status === 404) {
+      const candidates = await this.resolveRelevantCalendarIds()
+      for (const altCalId of candidates) {
+        if (altCalId === calId) continue
+        const retryRes = await this.fetchWithAuth(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(altCalId)}/events/${encodeURIComponent(id)}`,
+          {
+            method: 'DELETE',
+          }
+        )
+        if (retryRes.ok) return true
+      }
+    }
 
     return res.ok || res.status === 404
   }

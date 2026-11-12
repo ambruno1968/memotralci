@@ -12,6 +12,7 @@ import type { AppCalendarEvent } from './types/event.ts'
 import type { AppTaskItem } from './types/task.ts'
 import type { UploadedAttachment } from './types/attachment.ts'
 import { api, clearAppCaches, type GoogleStatus } from './services/api.ts'
+import { googleClientSide } from './services/googleClientSide.ts'
 import { categoryService } from './services/categoryService.ts'
 import { notificationService } from './services/notifications.ts'
 import { Loader2, CheckCircle } from 'lucide-react'
@@ -138,12 +139,16 @@ export function App() {
 
       if (showSyncIndicator) {
         const calName = status.resolvedCalendar || status.calendarId || 'Google Calendar'
-        setSyncNotice(
-          status.isGoogleConfigured
-            ? `Sincronizzato con Google Calendar & Drive (${calName})`
-            : 'Sincronizzato con archivio locale'
-        )
-        setTimeout(() => setSyncNotice(null), 3500)
+        if (googleClientSide.lastAuthError) {
+          setSyncNotice('Sessione Google scaduta: tocca "Google" in alto per rinnovare la sincronizzazione')
+        } else {
+          setSyncNotice(
+            status.isGoogleConfigured
+              ? `Sincronizzato con Google Calendar & Drive (${calName})`
+              : 'Sincronizzato con archivio locale'
+          )
+        }
+        setTimeout(() => setSyncNotice(null), 4500)
       }
     } catch (err) {
       console.error('Errore caricamento dati:', err)
@@ -163,9 +168,9 @@ export function App() {
     }
 
     // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
-    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_0_2')
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_0_3')
     if (!sessionCacheCleared || justConnected) {
-      sessionStorage.setItem('memotralci_cache_cleared_v2_0_2', 'true')
+      sessionStorage.setItem('memotralci_cache_cleared_v2_0_3', 'true')
       loadAllData(justConnected, true)
     } else {
       loadAllData()

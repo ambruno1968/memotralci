@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.0.2'
+export const APP_VERSION = 'v2.0.3'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.0.2',
+  version: '2.0.3',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,17 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.0.3',
+    date: '12/11/2026',
+    title: 'Sincronizzazione Multi-Calendario da Google Calendar verso MemoTralci',
+    type: 'patch',
+    changes: [
+      'Lettura unificata da tutti i calendari Google rilevanti (sia "Segreteria" sia il calendario principale "primary"), così ogni impegno creato direttamente su Google Calendar da telefono o web appare subito anche su MemoTralci.',
+      'Gestione intelligente di modifica ed eliminazione con tracciamento dell\'ID calendario di origine (calendarId) e fallback automatico.',
+      'Avviso esplicito durante la sincronizzazione manuale se il token Google richiede un rinnovo.',
+    ],
+  },
   {
     version: '2.0.2',
     date: '12/11/2026',

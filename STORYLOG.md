@@ -7,6 +7,15 @@
 
 ---
 
+## [v2.0.3] — 12 Novembre 2026
+### 🔄 Sincronizzazione Completa Impegni Creati Direttamente su Google Calendar
+- **Lettura unificata multi-calendario (`Segreteria` + `primary`):**
+  - Risolto il problema per cui un impegno creato direttamente sull'app o sito Google Calendar (che di default salva sul calendario principale `primary`) non appariva in MemoTralci quando quest'ultimo puntava al solo calendario secondario `"Segreteria"` (o viceversa).
+  - Ora `getCalendarEvents()` interroga in parallelo tutti i calendari rilevanti (`Segreteria` e `primary`, deduplicando per ID evento), rendendo visibile in MemoTralci qualsiasi impegno creato direttamente su Google Calendar.
+  - Aggiunto supporto `calendarId` su modifica/eliminazione eventi e avviso chiaro in caso di sessione scaduta durante il sync manuale.
+
+---
+
 ## [v2.0.2] — 12 Novembre 2026
 ### 📱 Ottimizzazione Responsive Mobile per Schermi Stretti e Corti
 - **Testata (`Navbar`) e Safe Area PWA (`safe-top`, `safe-bottom`, `safe-x`):**

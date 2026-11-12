@@ -162,16 +162,36 @@ export async function listCalendarEvents(
   if (calendar) {
     try {
       const calId = await resolveCalendarId(calendar)
-      const response = await calendar.events.list({
-        calendarId: calId,
-        timeMin: timeMin || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
-        timeMax: timeMax || new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 2500,
-      })
+      const targetCalendarIds = Array.from(new Set([calId, 'primary']))
+      const effectiveTimeMin = timeMin || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+      const effectiveTimeMax = timeMax || new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString()
 
-      const items = response.data.items || []
+      const results = await Promise.allSettled(
+        targetCalendarIds.map(async (cId) => {
+          const response = await calendar.events.list({
+            calendarId: cId,
+            timeMin: effectiveTimeMin,
+            timeMax: effectiveTimeMax,
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults: 2500,
+          })
+          return (response.data.items || []).map((item: any) => ({ ...item, __calendarId: cId }))
+        })
+      )
+
+      const seenIds = new Set<string>()
+      const items: any[] = []
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          for (const item of r.value) {
+            if (item?.id && !seenIds.has(item.id)) {
+              seenIds.add(item.id)
+              items.push(item)
+            }
+          }
+        }
+      }
       const googleEvents: AppCalendarEvent[] = items
         .filter((item: any) => item && item.status !== 'cancelled')
         .map((item: any) => {

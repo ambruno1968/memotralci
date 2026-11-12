@@ -24,6 +24,7 @@ export interface AppCalendarEvent {
   color?: string
   attachments?: EventAttachment[]
   googleEventId?: string
+  calendarId?: string
 }
 
 export const CATEGORY_COLORS: Record<

@@ -220,8 +220,8 @@ export const EventModal: React.FC<EventModalProps> = ({
 
       let saved: AppCalendarEvent
       if (isEditing && event) {
-        const res = await api.updateEvent(event.id, eventData)
-        saved = res || { ...eventData, id: event.id }
+        const res = await api.updateEvent(event.id, { ...eventData, calendarId: event.calendarId })
+        saved = res || { ...eventData, id: event.id, calendarId: event.calendarId }
       } else {
         saved = await api.createEvent(eventData)
       }
