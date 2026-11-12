@@ -23,6 +23,10 @@ export default defineConfig({
         'brand-logo.svg',
         'brand-logo.png',
         'robots.txt',
+        'qrcode.png',
+        'qrcode-brand.png',
+        'qrcode-flyer.png',
+        'qrcode.svg',
       ],
       manifest: {
         // ID univoco per evitare sovrapposizioni con altre PWA
@@ -66,7 +70,7 @@ export default defineConfig({
       },
       workbox: {
         // Prefisso cache univoco per isolare e forzare aggiornamento PWA
-        cacheId: 'memotralci-pwa-v13',
+        cacheId: 'memotralci-pwa-v14',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {

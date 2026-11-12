@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.4.0'
+export const APP_VERSION = 'v2.5.0'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.4.0',
+  version: '2.5.0',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,18 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.5.0',
+    date: '12/11/2026',
+    title: 'QR Code PWA nei Crediti, Scheda Dedicata per Altri Cellulari & Download Locandina',
+    type: 'minor',
+    changes: [
+      'Generazione e integrazione dei QR Code ufficiali (versione brandizzata con icona MemoTralci e classica ad alta risoluzione) per il sito PWA su GitHub Pages (https://ambruno1968.github.io/memotralci/).',
+      'Nuova scheda dedicata "📱 QR Code PWA" nel pannello Informazioni, con codice a tutto schermo scansionabile da qualsiasi smartphone, copia rapida del link negli appunti, condivisione Web Share e istruzioni per installazione PWA su Android e iOS.',
+      'Sezione QR Code integrata nella scheda Crediti & Note e nelle impostazioni Google con opzioni di download rapido per immagine QR Code PNG e Locandina Flyer pronta per la stampa.',
+      'Pulsante rapido con icona QR Code nella barra superiore (Navbar) e nel footer dell\'applicazione per consentire la condivisione istantanea con colleghi e altri dispositivi.',
+    ],
+  },
   {
     version: '2.4.0',
     date: '12/11/2026',

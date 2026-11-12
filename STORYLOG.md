@@ -7,6 +7,27 @@
 
 ---
 
+## [v2.5.0] — 12 Novembre 2026
+### 📱 QR Code PWA nei Crediti, Scheda Dedicata per Altri Cellulari & Download Locandina
+- **QR Code Ufficiale PWA:**
+  - Generati i QR code ufficiali del sito PWA (destinazione `https://ambruno1968.github.io/memotralci/`) in versione brandizzata con icona MemoTralci e classica vettoriale/ad alto contrasto, con livello di correzione errore **H** per garantire la scansione su qualsiasi schermo o supporto stampato.
+- **Scheda Dedicata Informazioni & Scansione Cellulari:**
+  - Nuova scheda `"📱 QR Code PWA"` nel modale di benvenuto e guida, con codice a tutto schermo, pulsante copia URL immediato, condivisione tramite Web Share API e guida passo-passo all'installazione su Android (Chrome/Edge) e iPhone/iPad (Safari).
+- **Integrazione nei Crediti e nel Footer:**
+  - Sezione QR Code integrata direttamente nel pannello Crediti & Note e nelle impostazioni Google, con pulsanti di download rapido per l'immagine PNG e per la **Locandina Flyer** (1200×1600) pronta per la stampa o l'affissione.
+  - Aggiunto pulsante di accesso rapido con icona QR Code nella Navbar in alto e nel footer per facilitare la condivisione istantanea tra colleghi e utenti.
+
+---
+
+## [v2.4.0] — 12 Novembre 2026
+### ✨ Condivisione Note con Logo Come Tralci & Tasto Condividi nei Modali
+- **Condivisione Note Post-it con Logo:**
+  - Nuovo pannello di condivisione note con anteprima grafica, messaggio formattato per WhatsApp, Web Share API e generazione locandina PNG ad alta risoluzione con logo Come Tralci, data, categoria e testo.
+- **Pulsanti di Condivisione Diretti:**
+  - Aggiunto pulsante di condivisione rapida direttamente su ogni card Post-it e nei modali di modifica Evento e Nota Post-it.
+
+---
+
 ## [v2.3.0] — 12 Novembre 2026
 ### ✨ Nuova Sezione Note (Post-it), Fix Modalità Scura, Multi-giorno & Sync Esclusivo `_categories.json`
 - **Sezione Note (Post-it):**

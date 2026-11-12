@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   X,
   BookOpen,
@@ -8,26 +8,78 @@ import {
   CheckSquare,
   Tag,
   Paperclip,
-  Cloud,
   Smartphone,
   Mail,
   ShieldCheck,
   Sparkles,
+  QrCode,
+  Copy,
+  Check,
+  Download,
+  ExternalLink,
+  Share2,
 } from 'lucide-react'
 import appLogo from '../assets/logo-icon.png'
 import { APP_VERSION, APP_CREDITS, APP_STORYLOG } from '../config/version.ts'
 
+export type AboutTabType = 'wiki' | 'qrcode' | 'storylog' | 'credits'
+
 interface AboutWikiModalProps {
   isOpen: boolean
   onClose: () => void
+  initialTab?: AboutTabType
 }
 
-type TabType = 'wiki' | 'storylog' | 'credits'
+export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({
+  isOpen,
+  onClose,
+  initialTab = 'wiki',
+}) => {
+  const [activeTab, setActiveTab] = useState<AboutTabType>(initialTab)
+  const [copied, setCopied] = useState(false)
+  const [qrStyle, setQrStyle] = useState<'brand' | 'classic'>('brand')
 
-export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('wiki')
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab)
+    }
+  }, [isOpen, initialTab])
 
   if (!isOpen) return null
+
+  const pwaUrl = 'https://ambruno1968.github.io/memotralci/'
+  const baseUrl = import.meta.env.BASE_URL || './'
+  const qrBrandImg = `${baseUrl}qrcode-brand.png`
+  const qrClassicImg = `${baseUrl}qrcode.png`
+  const qrFlyerImg = `${baseUrl}qrcode-flyer.png`
+
+  const currentQrImg = qrStyle === 'brand' ? qrBrandImg : qrClassicImg
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(pwaUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch (err) {
+      console.error('Failed to copy', err)
+    }
+  }
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'MemoTralci - PWA Agenda & Note',
+          text: 'Accedi e installa la PWA MemoTralci (Come Tralci):',
+          url: pwaUrl,
+        })
+      } catch {
+        // User cancelled share
+      }
+    } else {
+      handleCopyUrl()
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-5 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-200 safe-top safe-bottom">
@@ -36,7 +88,7 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
         <div className="relative pt-6 pb-4 px-6 border-b border-slate-100 dark:border-slate-800 text-center bg-gradient-to-b from-teal-50/50 to-transparent dark:from-teal-950/20">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-2xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="absolute top-4 right-4 p-2 rounded-2xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             title="Chiudi"
           >
             <X className="w-5 h-5" />
@@ -70,10 +122,10 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
           </div>
 
           {/* Tab switch */}
-          <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mt-5">
             <button
               onClick={() => setActiveTab('wiki')}
-              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
                 activeTab === 'wiki'
                   ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70'
@@ -84,8 +136,20 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
             </button>
 
             <button
+              onClick={() => setActiveTab('qrcode')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'qrcode'
+                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-teal-700 dark:text-teal-300 hover:bg-slate-200/70'
+              }`}
+            >
+              <QrCode className="w-4 h-4 text-emerald-500" />
+              <span>QR Code PWA</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('storylog')}
-              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
                 activeTab === 'storylog'
                   ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70'
@@ -97,7 +161,7 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
 
             <button
               onClick={() => setActiveTab('credits')}
-              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl text-xs font-black transition cursor-pointer ${
                 activeTab === 'credits'
                   ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70'
@@ -123,107 +187,232 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
                   <strong>Vista Giornaliera (&ldquo;Oggi&rdquo; / &ldquo;Giorno&rdquo;):</strong> cliccando su <em>Oggi</em>, su <em>Giorno</em> o sul numero di una data nel calendario visualizzi solo gli impegni e le attività di quel singolo giorno.
                 </li>
                 <li>
-                  <strong>Agenda da Oggi in Poi:</strong> la vista <em>Agenda</em> mostra automaticamente solo gli impegni da oggi in avanti, nascondendo quelli passati.
+                  <strong>Viste Calendario:</strong> naviga rapidamente tra <em>Mese</em>, <em>Settimana</em>, <em>Giorno</em> e <em>Agenda Cronologica</em>.
                 </li>
                 <li>
-                  <strong>Condivisione WhatsApp con Logo:</strong> da <em>Giorno</em> o da <em>Agenda</em> clicca su <strong>Condividi</strong> per inviare l'evento (o l'intera giornata) su WhatsApp con formattazione elegante o come locandina PNG con il logo Come Tralci.
+                  <strong>Eventi Multi-giorno:</strong> indicano in modo chiaro data e ora completa di inizio e fine sia nell'agenda che nella vista giornaliera.
                 </li>
                 <li>
-                  <strong>Passi di 5 minuti &amp; Orario coerente:</strong> i minuti avanzano a scatti di 5 e l'orario di fine si adegua sempre a quello di inizio.
+                  <strong>Sincronizzazione Automatica:</strong> sincronizzazione continua ogni 25 secondi con Google Calendar centralizzato.
                 </li>
               </ul>
             </div>
 
-            {/* 2. Cose da Fare */}
+            {/* 2. Cose da fare */}
             <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-900/50 space-y-2">
               <div className="flex items-center space-x-2 font-black text-emerald-900 dark:text-emerald-200 text-sm sm:text-base">
                 <CheckSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>2. Cose da Fare (Attività & To-Do)</span>
+                <span>2. Cose da Fare (To-Do & Checklist)</span>
               </div>
               <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
                 <li>
-                  <strong>Archivio dedicato su Drive:</strong> le attività vengono salvate nella cartella <code>allegati/Archivio_Task</code> sia come archivio singoli file JSON (per data e descrizione) sia con indice generale.
+                  <strong>Priorità & Scadenze:</strong> organizza le attività con priorità colorate e avvisi visivi in caso di scadenza imminente o superata.
                 </li>
                 <li>
-                  <strong>Priorità e Scadenze:</strong> organizza le attività per Bassa, Media, Alta o Urgente, con checklist per suddividere compiti complessi.
+                  <strong>Conversione in Evento 1-Click:</strong> trasforma qualsiasi task con scadenza in un evento del calendario con un solo tocco.
+                </li>
+                <li>
+                  <strong>Checklist Interna:</strong> suddividi le attività complesse in comode sotto-attività spuntabili.
                 </li>
               </ul>
             </div>
 
-            {/* 3. Categorie */}
+            {/* 3. Note Post-it */}
+            <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 space-y-2">
+              <div className="flex items-center space-x-2 font-black text-amber-900 dark:text-amber-200 text-sm sm:text-base">
+                <Tag className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>3. Sezione Note (Post-it) & Condivisione</span>
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
+                <li>
+                  <strong>Bacheca Post-it Colorata:</strong> crea e organizza appunti rapidi con 6 colori pastello e fissali in alto con la puntina (Pin).
+                </li>
+                <li>
+                  <strong>Condivisione Grafica con Logo:</strong> genera al volo una locandina PNG elegante con logo Come Tralci o condividi il testo formattato su WhatsApp e altre app.
+                </li>
+              </ul>
+            </div>
+
+            {/* 4. Documenti & Allegati */}
             <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-900/50 space-y-2">
               <div className="flex items-center space-x-2 font-black text-purple-900 dark:text-purple-200 text-sm sm:text-base">
-                <Tag className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
-                <span>3. Categorie Facoltative & Gestione Completa</span>
+                <Paperclip className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
+                <span>4. Gestione Documenti & Allegati Drive</span>
               </div>
               <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
                 <li>
-                  <strong>Facoltative:</strong> non c'è più una categoria obbligatoria o preselezionata per forza.
+                  <strong>Upload Multiplo & Formati Supportati:</strong> carica PDF, foto, ricevute, documenti Word/Excel, note audio e archivi ZIP.
                 </li>
                 <li>
-                  <strong>Multi-assegnazione:</strong> puoi assegnare più categorie contemporaneamente a un evento o a un task toccandole per far comparire la spunta.
-                </li>
-                <li>
-                  <strong>Gestisci (Rinomina ed Elimina):</strong> tramite il pulsante <em>⚙️ Gestisci</em> puoi cambiare nome o colore a una categoria, oppure eliminarla in sicurezza: i task collegati rimarranno intatti senza perdere alcun dato.
+                  <strong>Visualizzatore Integrato:</strong> anteprima immediata a tutto schermo per PDF e immagini, con link per il download o apertura diretta su Google Drive.
                 </li>
               </ul>
             </div>
 
-            {/* 4. Allegati & Note Vocali */}
+            {/* 5. PWA & Offline */}
             <div className="p-4 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200/70 dark:border-teal-900/50 space-y-2">
               <div className="flex items-center space-x-2 font-black text-teal-900 dark:text-teal-200 text-sm sm:text-base">
-                <Paperclip className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span>4. Allegati, Note Vocali & Cancellazione Fisica</span>
+                <Smartphone className="w-5 h-5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>5. PWA (Installazione su Smartphone e PC)</span>
               </div>
-              <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
-                <li>
-                  <strong>Drag & Drop e Note Vocali:</strong> puoi trascinare file (PDF, immagini, documenti) o registrare memo vocali direttamente dal microfono.
-                </li>
-                <li>
-                  <strong>Cancellazione fisica su Drive:</strong> quando elimini un allegato (o l'attività che lo contiene), il file viene eliminato fisicamente anche da Google Drive, evitando accumuli di file orfani.
-                </li>
-              </ul>
-            </div>
-
-            {/* 5. Connessione & Rinnovo Silenzioso */}
-            <div className="p-4 rounded-2xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/70 dark:border-sky-900/50 space-y-2">
-              <div className="flex items-center space-x-2 font-black text-sky-900 dark:text-sky-200 text-sm sm:text-base">
-                <Cloud className="w-5 h-5 text-sky-600 dark:text-sky-400 shrink-0" />
-                <span>5. Connessione Google Sempre Attiva</span>
-              </div>
-              <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
-                Grazie al <strong>Rinnovo Automatico Silenzioso (Silent Refresh)</strong>, MemoTralci rinnova il token di sicurezza in background prima che scada l'ora di validità di Google, evitando disconnessioni continue.
-              </p>
-            </div>
-
-            {/* 6. Installazione PWA */}
-            <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
-              <div className="flex items-center space-x-2 font-black text-slate-900 dark:text-slate-200 text-sm sm:text-base">
-                <Smartphone className="w-5 h-5 text-slate-600 dark:text-slate-400 shrink-0" />
-                <span>6. Installazione su Smartphone, Tablet e PC</span>
-              </div>
-              <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-[13px] leading-relaxed">
-                MemoTralci è una PWA (Progressive Web App): puoi installarla come un'app nativa cliccando sul pulsante <strong>Installa</strong> nella barra in alto, oppure dal menu del browser (<em>"Aggiungi a schermata Home"</em> su smartphone/tablet o <em>"Installa app"</em> su Chrome/Edge).
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                L'applicazione è installabile come app nativa senza passare dagli store. Apri la scheda <strong>QR Code PWA</strong> per inquadrare il codice con la fotocamera del tuo cellulare o di altri dispositivi.
               </p>
             </div>
           </div>
         )}
 
-        {/* Tab 2: Storylog (Storico Versioni) */}
-        {activeTab === 'storylog' && (
-          <div className="p-5 sm:p-6 overflow-y-auto space-y-3.5 flex-1 text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
-            <div className="flex items-center justify-between px-1 pb-1">
-              <div className="flex items-center space-x-2">
-                <History className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                <span className="font-black text-slate-900 dark:text-white text-sm">
-                  Cronologia Rilasci (Storylog SemVer)
-                </span>
-              </div>
-              <span className="text-[11px] font-bold text-slate-400">
-                {APP_STORYLOG.length} versioni
-              </span>
+        {/* Tab 2: QR Code PWA (Scansione da altri cellulari) */}
+        {activeTab === 'qrcode' && (
+          <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+            <div className="text-center space-y-1">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center justify-center space-x-2">
+                <QrCode className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <span>Scansiona con altri cellulari</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Inquadra questo QR code con la fotocamera di qualsiasi smartphone Android o iPhone per aprire subito MemoTralci e installarla.
+              </p>
             </div>
 
+            {/* QR Box interattivo */}
+            <div className="bg-gradient-to-b from-teal-50/70 via-slate-50 to-white dark:from-teal-950/30 dark:via-slate-800/60 dark:to-slate-900 p-5 rounded-3xl border border-teal-200/80 dark:border-teal-800/70 flex flex-col items-center shadow-lg space-y-4">
+              {/* Selettore Stile QR */}
+              <div className="inline-flex p-1 bg-slate-200/70 dark:bg-slate-800 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setQrStyle('brand')}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                    qrStyle === 'brand'
+                      ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Con Logo MemoTralci
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQrStyle('classic')}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                    qrStyle === 'classic'
+                      ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Classico Alto Contrasto
+                </button>
+              </div>
+
+              {/* QR Image con ombra e badge */}
+              <div className="relative p-3 bg-white rounded-2xl shadow-xl ring-4 ring-teal-500/20 max-w-[240px] sm:max-w-[280px]">
+                <img
+                  src={currentQrImg}
+                  alt="QR Code PWA MemoTralci"
+                  className="w-full h-auto rounded-lg select-none"
+                />
+              </div>
+
+              {/* URL Pill con pulsante Copia */}
+              <div className="w-full max-w-md bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700 p-2 sm:p-2.5 flex items-center justify-between gap-2 shadow-xs">
+                <div className="truncate text-[11px] sm:text-xs font-mono font-bold text-teal-700 dark:text-teal-300 pl-1">
+                  {pwaUrl}
+                </div>
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    onClick={handleCopyUrl}
+                    className="p-1.5 sm:px-2.5 sm:py-1 rounded-xl bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 text-xs font-bold transition flex items-center space-x-1 cursor-pointer border border-teal-200/70 dark:border-teal-800"
+                    title="Copia indirizzo negli appunti"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[10px] sm:text-xs">Copiato!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[10px] sm:text-xs">Copia</span>
+                      </>
+                    )}
+                  </button>
+
+                  <a
+                    href={pwaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition"
+                    title="Apri sito in una nuova scheda"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Pulsanti di Azione e Download */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1 w-full max-w-md">
+                <a
+                  href={currentQrImg}
+                  download={qrStyle === 'brand' ? 'qrcode-memotralci-brand.png' : 'qrcode-memotralci.png'}
+                  className="flex-1 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm text-center"
+                >
+                  <Download className="w-4 h-4 shrink-0" />
+                  <span>Scarica QR (PNG)</span>
+                </a>
+
+                <a
+                  href={qrFlyerImg}
+                  download="locandina-memotralci-flyer.png"
+                  className="flex-1 py-2 px-3 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm border border-slate-700 text-center"
+                >
+                  <Download className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>Locandina Stampa</span>
+                </a>
+
+                {typeof navigator !== 'undefined' && 'share' in navigator && (
+                  <button
+                    onClick={handleShare}
+                    className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer"
+                    title="Condividi tramite WhatsApp o altre app"
+                  >
+                    <Share2 className="w-4 h-4 shrink-0" />
+                    <span>Condividi</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Mini Guida Installazione Smartphone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700 space-y-1.5">
+                <div className="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                  <Smartphone className="w-4 h-4 text-emerald-600" />
+                  <span>Su Android (Chrome / Edge)</span>
+                </div>
+                <ol className="list-decimal list-inside text-slate-500 dark:text-slate-400 space-y-1 text-[11px] leading-relaxed">
+                  <li>Inquadra il QR con la fotocamera o Google Lens</li>
+                  <li>Tocca i tre puntini <strong className="text-slate-700 dark:text-slate-200">⋮</strong> in alto a destra</li>
+                  <li>Seleziona <strong className="text-slate-700 dark:text-slate-200">&ldquo;Installa app&rdquo;</strong> o <strong className="text-slate-700 dark:text-slate-200">&ldquo;Aggiungi a schermata Home&rdquo;</strong></li>
+                </ol>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700 space-y-1.5">
+                <div className="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                  <Smartphone className="w-4 h-4 text-indigo-600" />
+                  <span>Su iPhone / iPad (Safari)</span>
+                </div>
+                <ol className="list-decimal list-inside text-slate-500 dark:text-slate-400 space-y-1 text-[11px] leading-relaxed">
+                  <li>Inquadra il QR con la fotocamera e tocca il link</li>
+                  <li>Tocca il pulsante <strong className="text-slate-700 dark:text-slate-200">Condividi</strong> (quadrato con freccia in su)</li>
+                  <li>Scorri e tocca <strong className="text-slate-700 dark:text-slate-200">&ldquo;Aggiungi alla schermata Home&rdquo;</strong></li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Storylog */}
+        {activeTab === 'storylog' && (
+          <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
             {APP_STORYLOG.map((entry, idx) => (
               <div
                 key={entry.version}
@@ -267,9 +456,47 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
           </div>
         )}
 
-        {/* Tab 3: Crediti & Informazioni */}
+        {/* Tab 4: Crediti & Informazioni */}
         {activeTab === 'credits' && (
           <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1 text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+            {/* Box QR Code nei crediti */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/30 border border-teal-200 dark:border-teal-800/70 flex flex-col sm:flex-row items-center gap-4 shadow-xs">
+              <div className="w-24 h-24 p-1.5 bg-white rounded-xl shadow-md ring-2 ring-teal-500/20 shrink-0">
+                <img
+                  src={qrBrandImg}
+                  alt="QR Code PWA"
+                  className="w-full h-full object-cover rounded-md"
+                />
+              </div>
+              <div className="flex-1 text-center sm:text-left space-y-1.5">
+                <div className="flex items-center justify-center sm:justify-start space-x-1.5 font-black text-slate-900 dark:text-white text-sm">
+                  <QrCode className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span>Scansiona con altri cellulari</span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Inquadra il QR code per installare o usare l'app su un altro smartphone o tablet.
+                </p>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                  <button
+                    onClick={() => setActiveTab('qrcode')}
+                    className="px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center space-x-1"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Apri QR Code Ingrandito</span>
+                  </button>
+                  <a
+                    href={qrFlyerImg}
+                    download="locandina-memotralci.png"
+                    className="px-3 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-bold transition border border-slate-300 dark:border-slate-700 flex items-center space-x-1"
+                  >
+                    <Download className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Locandina Stampa</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Dettagli Software & Sviluppatore */}
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700 space-y-3">
               <h3 className="font-black text-slate-900 dark:text-white text-sm sm:text-base flex items-center space-x-2">
                 <ShieldCheck className="w-5 h-5 text-teal-600" />
@@ -323,6 +550,7 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
               </h4>
               <ul className="list-disc list-inside space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                 <li>Architettura PWA Offline-First con Service Worker</li>
+                <li>QR Code integrato e supporto Web Share API</li>
                 <li>Google Identity Services OAuth 2.0 (Silent Token Refresh)</li>
                 <li>Google Calendar API v3 & Google Drive API v3</li>
                 <li>Database locale IndexedDB sincronizzato</li>
@@ -342,7 +570,7 @@ export const AboutWikiModal: React.FC<AboutWikiModalProps> = ({ isOpen, onClose 
           </span>
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black transition shadow-sm"
+            className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black transition shadow-sm cursor-pointer"
           >
             Ho capito, Chiudi
           </button>

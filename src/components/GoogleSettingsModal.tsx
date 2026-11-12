@@ -12,6 +12,7 @@ import {
   LogOut,
   Upload,
   Info,
+  QrCode,
 } from 'lucide-react'
 import { api, clearAppCaches, type GoogleStatus } from '../services/api.ts'
 import { googleClientSide, GOOGLE_DEFAULTS } from '../services/googleClientSide.ts'
@@ -366,6 +367,36 @@ export const GoogleSettingsModal: React.FC<GoogleSettingsModalProps> = ({
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                       {APP_CREDITS.description}
                     </p>
+                  </div>
+                </div>
+
+                {/* Scheda QR Code per altri cellulari */}
+                <div className="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/30 border border-teal-200 dark:border-teal-800/80 flex items-center gap-3">
+                  <div className="w-16 h-16 p-1 bg-white rounded-xl shadow-md shrink-0">
+                    <img
+                      src={`${import.meta.env.BASE_URL || './'}qrcode-brand.png`}
+                      alt="QR Code PWA"
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center space-x-1">
+                      <QrCode className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>Scansiona con altri cellulari</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                      https://ambruno1968.github.io/memotralci/
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1.5">
+                      <a
+                        href={`${import.meta.env.BASE_URL || './'}qrcode-brand.png`}
+                        download="qrcode-memotralci.png"
+                        className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold transition flex items-center space-x-1"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Scarica QR Code</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
 
