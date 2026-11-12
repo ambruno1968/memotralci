@@ -299,60 +299,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
         </div>
 
-        {/* Category Filter Chips Bar */}
-        <div className="flex items-center space-x-2 overflow-x-auto pt-3 border-t border-slate-100 dark:border-slate-800">
-          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider mr-1 shrink-0">
-            Categorie:
+        {/* Category Filter Select */}
+        <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider shrink-0">
+            Categoria:
           </span>
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer ${
-              selectedCategory === 'all'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-            }`}
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="flex-1 sm:flex-none sm:min-w-[220px] px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
           >
-            Tutti ({events.length})
-          </button>
-          {(() => {
-            const uncategorizedCount = events.filter((e) => normalizeCategories(e).length === 0).length
-            if (uncategorizedCount === 0) return null
-            const isSelected = selectedCategory === 'none'
-            return (
-              <button
-                onClick={() => setSelectedCategory(isSelected ? 'all' : 'none')}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-xl text-xs font-black whitespace-nowrap border transition cursor-pointer ${
-                  isSelected
-                    ? 'bg-slate-700 text-white border-slate-600 ring-2 ring-slate-400 shadow-sm'
-                    : 'bg-white/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-400 ring-2 ring-white/50" />
-                <span>Senza categoria</span>
-                <span className="opacity-75 text-[10px]">({uncategorizedCount})</span>
-              </button>
-            )
-          })()}
-          {categories.map((catItem) => {
-            const conf = categoryService.getCategoryStyle(catItem.id)
-            const isSelected = selectedCategory === catItem.id
-            const count = events.filter((e) => normalizeCategories(e).includes(catItem.id)).length
-            return (
-              <button
-                key={catItem.id}
-                onClick={() => setSelectedCategory(isSelected ? 'all' : catItem.id)}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-xl text-xs font-black whitespace-nowrap border transition cursor-pointer ${
-                  isSelected
-                    ? `${conf.bg} ${conf.text} ${conf.border} ring-2 ring-indigo-500 shadow-sm`
-                    : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <span className={`w-2.5 h-2.5 rounded-full ${conf.dot} ring-2 ring-white/50`} />
-                <span>{catItem.label}</span>
-                {count > 0 && <span className="opacity-75 text-[10px]">({count})</span>}
-              </button>
-            )
-          })}
+            <option value="all">Tutte le categorie ({events.length})</option>
+            <option value="none">
+              Senza categoria ({events.filter((e) => normalizeCategories(e).length === 0).length})
+            </option>
+            {categories.map((catItem) => {
+              const count = events.filter((e) => normalizeCategories(e).includes(catItem.id)).length
+              return (
+                <option key={catItem.id} value={catItem.id}>
+                  {catItem.label} {count > 0 ? `(${count})` : ''}
+                </option>
+              )
+            })}
+          </select>
         </div>
       </div>
 

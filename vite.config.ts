@@ -66,7 +66,7 @@ export default defineConfig({
       },
       workbox: {
         // Prefisso cache univoco per isolare e forzare aggiornamento PWA
-        cacheId: 'memotralci-pwa-v10',
+        cacheId: 'memotralci-pwa-v11',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {

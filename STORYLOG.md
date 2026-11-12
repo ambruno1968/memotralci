@@ -7,6 +7,12 @@
 
 ---
 
+## [v2.2.1] — 12 Novembre 2026
+### 🎨 Uniformazione Selettore Filtro Categorie
+- Uniformato il filtro categorie tra **Agenda & Calendario**, **Cose da Fare** e **Gestione Allegati & Documenti** utilizzando lo stesso menu a tendina compatto (`Tutte le categorie` / `Senza categoria`).
+
+---
+
 ## [v2.2.0] — 12 Novembre 2026
 ### ✨ Scadenze Imminenti, Anteprima PDF/Multi-formato, Sync Categorie Task-Allegati & Riorganizzazione Drive
 - **Scadenze & Impegni Imminenti:**

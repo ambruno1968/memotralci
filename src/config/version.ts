@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.2.0'
+export const APP_VERSION = 'v2.2.1'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.2.0',
+  version: '2.2.1',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,15 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.2.1',
+    date: '12/11/2026',
+    title: 'Uniformazione Selettore Filtro Categorie in Agenda, Task e Allegati',
+    type: 'patch',
+    changes: [
+      'Sostituita la barra dei chip categoria in Agenda & Calendario e in Gestione Allegati & Documenti con il menu a tendina compatto ("Tutte le categorie" / "Senza categoria") già usato in Cose da Fare, per una grafica uniforme e più pulita su desktop e mobile.',
+    ],
+  },
   {
     version: '2.2.0',
     date: '12/11/2026',
