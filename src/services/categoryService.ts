@@ -6,6 +6,8 @@ export type { CategoryColorName, AppCategoryItem, CategoriesCloudPayload } from 
 import type { CategoryColorName, AppCategoryItem, CategoriesCloudPayload } from '../types/category.ts'
 import { googleClientSide } from './googleClientSide.ts'
 
+export const MAX_CATEGORIES = 15
+
 export interface CategoryStyle {
   bg: string
   text: string
@@ -199,10 +201,18 @@ class CategoryService {
     } catch {}
     listeners.forEach((l) => l([...this.categories]))
 
-    if (syncCloud && googleClientSide.isConnected()) {
-      googleClientSide.saveDriveCategories(this.buildPayload()).catch((e) => {
-        console.warn('[CategoryService] Errore salvataggio automatico categorie nel cloud:', e)
-      })
+    if (syncCloud) {
+      if (googleClientSide.isConnected()) {
+        googleClientSide.saveDriveCategories(this.buildPayload()).catch((e) => {
+          console.warn('[CategoryService] Errore salvataggio automatico categorie nel cloud:', e)
+        })
+      } else {
+        fetch('/api/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.buildPayload()),
+        }).catch(() => {})
+      }
     }
   }
 
@@ -213,17 +223,30 @@ class CategoryService {
    *   dalle categorie predefinite di un dispositivo non ancora allineato.
    */
   public async syncWithDrive(): Promise<AppCategoryItem[]> {
-    if (!googleClientSide.isConnected()) {
-      return [...this.categories]
-    }
-
     if (this.syncPromise) {
       return this.syncPromise
     }
 
     this.syncPromise = (async () => {
       try {
-        const cloudPayload = await googleClientSide.getDriveCategories()
+        let cloudPayload: CategoriesCloudPayload | null = null
+
+        if (googleClientSide.isConnected()) {
+          cloudPayload = await googleClientSide.getDriveCategories()
+        }
+
+        // Fallback a server locale (/api/categories) se in esecuzione in locale senza token browser
+        if (!cloudPayload) {
+          try {
+            const res = await fetch('/api/categories', {
+              cache: 'no-store',
+              signal: AbortSignal.timeout(4000),
+            })
+            if (res.ok) {
+              cloudPayload = await res.json()
+            }
+          } catch {}
+        }
 
         if (cloudPayload && Array.isArray(cloudPayload.categories) && cloudPayload.categories.length > 0) {
           const validCloudCats = cloudPayload.categories.filter(
@@ -241,36 +264,44 @@ class CategoryService {
                   ? 1000
                   : 0
 
-            if (effectiveCloudUpdatedAt > this.updatedAt) {
-              // Il Cloud ha una versione più recente delle categorie: adottala sul dispositivo
-              const mergedDeleted = Array.from(
-                new Set([...(cloudPayload.deletedIds || []), ...this.deletedIds])
-              )
-              const mergedCats = [...validCloudCats]
-
-              // Se anche questo dispositivo aveva categorie custom create localmente e non eliminate, uniscile
-              if (this.updatedAt > 0 && !cloudPayload.explicitReset) {
-                const cloudIds = new Set(mergedCats.map((c) => c.id))
-                for (const localCat of this.categories) {
-                  if (!localCat.isDefault && !cloudIds.has(localCat.id) && !mergedDeleted.includes(localCat.id)) {
-                    mergedCats.push(localCat)
-                  }
-                }
-              }
-
-              this.categories = mergedCats
+            if (effectiveCloudUpdatedAt >= this.updatedAt) {
+              // Il file _categories.json su Drive è aggiornato o uguale: adotta esattamente il dataset del file
+              this.categories = [...validCloudCats]
               this.updatedAt = effectiveCloudUpdatedAt
               this.deletedIds = cloudPayload.deletedIds || []
               this.explicitReset = Boolean(cloudPayload.explicitReset)
               this.save(false)
               return [...this.categories]
-            } else if (this.updatedAt > effectiveCloudUpdatedAt) {
-              // Questo dispositivo ha personalizzazioni più recenti rispetto al Cloud: aggiorna il Cloud
-              await googleClientSide.saveDriveCategories(this.buildPayload())
+            } else {
+              // Questo dispositivo ha personalizzazioni più recenti rispetto al file su Drive
+              let addedFromCloud = false
+              if (!this.explicitReset) {
+                const localIds = new Set(this.categories.map((c) => c.id))
+                const localDeleted = new Set(this.deletedIds)
+                for (const cloudCat of validCloudCats) {
+                  if (!localIds.has(cloudCat.id) && !localDeleted.has(cloudCat.id)) {
+                    this.categories.push(cloudCat)
+                    localIds.add(cloudCat.id)
+                    addedFromCloud = true
+                  }
+                }
+                if (addedFromCloud) {
+                  this.save(false)
+                }
+              }
+              if (googleClientSide.isConnected()) {
+                await googleClientSide.saveDriveCategories(this.buildPayload())
+              } else {
+                fetch('/api/categories', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(this.buildPayload()),
+                }).catch(() => {})
+              }
               return [...this.categories]
             }
           }
-        } else if (this.categories.length > 0) {
+        } else if (this.categories.length > 0 && googleClientSide.isConnected()) {
           // Nessun file nel Cloud: carica lo stato corrente
           await googleClientSide.saveDriveCategories(this.buildPayload())
         }
@@ -323,6 +354,10 @@ class CategoryService {
       this.categories[existingIndex].color = color
       this.save(true)
       return this.categories[existingIndex]
+    }
+
+    if (this.categories.length >= MAX_CATEGORIES) {
+      throw new Error('Bisogna cancellarne una per crearne una nuova')
     }
 
     const newCat: AppCategoryItem = {

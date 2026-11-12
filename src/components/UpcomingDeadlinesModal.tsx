@@ -293,7 +293,7 @@ export const UpcomingDeadlinesModal: React.FC<UpcomingDeadlinesModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-amber-50/70 via-white to-indigo-50/60 dark:from-slate-800/80 dark:to-slate-800/50 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-amber-50/70 via-white to-indigo-50/60 dark:from-slate-800/90 dark:via-slate-900 dark:to-slate-800/70 shrink-0">
           <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
             <div className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/25 shrink-0">
               <BellRing className="w-4 h-4 sm:w-5 sm:h-5" />

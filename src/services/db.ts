@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
+import type { AppNoteItem } from '../types/note.ts'
 
 interface AuthSessionRecord {
   id: string
@@ -37,13 +38,17 @@ interface MemoTralciDB extends DBSchema {
     key: string
     value: AuthSessionRecord
   }
+  notes: {
+    key: string
+    value: AppNoteItem
+  }
 }
 
 let dbPromise: Promise<IDBPDatabase<MemoTralciDB>> | null = null
 
 function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<MemoTralciDB>('memotralci_pwa_db', 2, {
+    dbPromise = openDB<MemoTralciDB>('memotralci_pwa_db', 3, {
       upgrade(db) {
         if (!db.objectStoreNames.contains('events')) {
           db.createObjectStore('events', { keyPath: 'id' })
@@ -59,6 +64,9 @@ function getDB() {
         }
         if (!db.objectStoreNames.contains('authSession')) {
           db.createObjectStore('authSession', { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains('notes')) {
+          db.createObjectStore('notes', { keyPath: 'id' })
         }
       },
     })
@@ -134,6 +142,29 @@ export const localDB = {
     const db = await getDB()
     await db.delete('attachments', id)
     await db.delete('cachedFiles', id)
+  },
+
+  // Notes (Post-it)
+  async getAllNotes(): Promise<AppNoteItem[]> {
+    const db = await getDB()
+    return db.getAll('notes')
+  },
+  async saveNote(note: AppNoteItem): Promise<void> {
+    const db = await getDB()
+    await db.put('notes', note)
+  },
+  async saveNotes(notes: AppNoteItem[]): Promise<void> {
+    const db = await getDB()
+    const tx = db.transaction('notes', 'readwrite')
+    await tx.store.clear()
+    for (const n of notes) {
+      await tx.store.put(n)
+    }
+    await tx.done
+  },
+  async deleteNote(id: string): Promise<void> {
+    const db = await getDB()
+    await db.delete('notes', id)
   },
 
   // Cache File blob data

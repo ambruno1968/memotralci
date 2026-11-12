@@ -3,6 +3,7 @@ import { Plus, X, Tag, Check, Settings2 } from 'lucide-react'
 import {
   categoryService,
   COLOR_PALETTE,
+  MAX_CATEGORIES,
   type AppCategoryItem,
   type CategoryColorName,
 } from '../services/categoryService.ts'
@@ -28,6 +29,7 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
   const [newLabel, setNewLabel] = useState('')
   const [selectedColor, setSelectedColor] = useState<CategoryColorName>('purple')
   const [isManagerOpen, setIsManagerOpen] = useState(false)
+  const [limitError, setLimitError] = useState<string | null>(null)
 
   // Calcola l'array normalizzato delle categorie correntemente selezionate
   const currentSelected: string[] = React.useMemo(() => {
@@ -70,13 +72,18 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
 
   function handleCreate() {
     if (!newLabel.trim()) return
-    const created = categoryService.addCategory(newLabel.trim(), selectedColor)
-    // Seleziona subito la nuova categoria creata
-    const next = [...currentSelected, created.id]
-    if (onChange) onChange(next)
-    if (onChangeSingle) onChangeSingle(created.id)
-    setNewLabel('')
-    setIsCreating(false)
+    try {
+      const created = categoryService.addCategory(newLabel.trim(), selectedColor)
+      // Seleziona subito la nuova categoria creata
+      const next = [...currentSelected, created.id]
+      if (onChange) onChange(next)
+      if (onChangeSingle) onChangeSingle(created.id)
+      setNewLabel('')
+      setIsCreating(false)
+      setLimitError(null)
+    } catch (err: any) {
+      setLimitError(err?.message || 'Bisogna cancellarne una per crearne una nuova')
+    }
   }
 
   const colors = Object.keys(COLOR_PALETTE) as CategoryColorName[]
@@ -97,7 +104,14 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
           {!isCreating && (
             <button
               type="button"
-              onClick={() => setIsCreating(true)}
+              onClick={() => {
+                if (categories.length >= MAX_CATEGORIES) {
+                  setLimitError('Bisogna cancellarne una per crearne una nuova')
+                  return
+                }
+                setLimitError(null)
+                setIsCreating(true)
+              }}
               className="text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center space-x-1"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -116,6 +130,12 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
           </button>
         </div>
       </div>
+
+      {limitError && (
+        <div className="mb-2.5 px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold">
+          {limitError}
+        </div>
+      )}
 
       {/* Creazione Rapida Nuova Categoria */}
       {isCreating && (

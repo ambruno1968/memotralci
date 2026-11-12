@@ -5,6 +5,7 @@
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
 import type { AppTaskItem } from '../types/task.ts'
+import type { AppNoteItem } from '../types/note.ts'
 import type { CategoriesCloudPayload } from '../types/category.ts'
 import { localDB } from './db.ts'
 
@@ -47,6 +48,7 @@ const STORAGE_KEYS = {
   TASK_FOLDER_ID: 'memotralci_task_folder_id',
   ATTACHMENTS_FOLDER_ID: 'memotralci_attachments_folder_id',
   VOICE_FOLDER_ID: 'memotralci_voice_folder_id',
+  NOTES_FOLDER_ID: 'memotralci_notes_folder_id',
   RECENT_EVENTS: 'memotralci_recent_events_v2',
   DELETED_EVENTS: 'memotralci_deleted_events_v2',
 }
@@ -67,6 +69,7 @@ class GoogleClientSide {
   private cachedTaskFolderId: string | null = null
   private cachedAttachmentsFolderId: string | null = null
   private cachedVoiceFolderId: string | null = null
+  private cachedNotesFolderId: string | null = null
   private refreshTimer: any = null
   private refreshPromise: Promise<string | null> | null = null
   private reorganizePromise: Promise<void> | null = null
@@ -79,6 +82,7 @@ class GoogleClientSide {
     this.cachedTaskFolderId = localStorage.getItem(STORAGE_KEYS.TASK_FOLDER_ID)
     this.cachedAttachmentsFolderId = localStorage.getItem(STORAGE_KEYS.ATTACHMENTS_FOLDER_ID)
     this.cachedVoiceFolderId = localStorage.getItem(STORAGE_KEYS.VOICE_FOLDER_ID)
+    this.cachedNotesFolderId = localStorage.getItem(STORAGE_KEYS.NOTES_FOLDER_ID)
 
     this.restoreSessionFromIndexedDB()
     this.setupLifecycleListeners()
@@ -1294,6 +1298,17 @@ class GoogleClientSide {
     return id
   }
 
+  public async resolveNotesArchiveFolderId(): Promise<string> {
+    if (this.cachedNotesFolderId) return this.cachedNotesFolderId
+    const id = await this.resolveSubfolderId(
+      'Archivio_Note',
+      STORAGE_KEYS.NOTES_FOLDER_ID,
+      'Archivio delle note Post-it MemoTralci'
+    )
+    this.cachedNotesFolderId = id
+    return id
+  }
+
   public async uploadFile(file: File, categories: string[] = []): Promise<UploadedAttachment> {
     const isVoice = this.isVoiceNoteFile(file.type, file.name)
     const folderId = isVoice
@@ -1404,6 +1419,7 @@ class GoogleClientSide {
       n === 'tasks.json' ||
       n === '_tasks_index.json' ||
       n === '_categories.json' ||
+      n === '_notes.json' ||
       n.includes('client secret') ||
       n.includes('service-account')
     ) {
@@ -1422,6 +1438,7 @@ class GoogleClientSide {
         const [attachmentsFolderId, voiceFolderId] = await Promise.all([
           this.resolveAttachmentsArchiveFolderId(),
           this.resolveVoiceNotesArchiveFolderId(),
+          this.resolveNotesArchiveFolderId(),
         ])
 
         // 1. Consolida eventuali duplicati di _categories.json in un unico file
@@ -1528,7 +1545,8 @@ class GoogleClientSide {
     const res = await this.fetchWithAuth(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
         query
-      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties)&pageSize=200&orderBy=createdTime%20desc`
+      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties)&pageSize=200&orderBy=createdTime%20desc`,
+      { cache: 'no-store' }
     )
 
     if (!res.ok) return []
@@ -1655,7 +1673,8 @@ class GoogleClientSide {
         ? `'${folderId}' in parents and trashed = false`
         : `'${folderId}' in parents and name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
       const searchRes = await this.fetchWithAuth(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=50`
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=50`,
+        { cache: 'no-store' }
       )
       if (searchRes.ok) {
         const searchData = await searchRes.json()
@@ -1670,7 +1689,8 @@ class GoogleClientSide {
       if (!existingFileId && !matchSuffix) {
         const globalQ = `name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`
         const globalRes = await this.fetchWithAuth(
-          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(globalQ)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=10`
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(globalQ)}&orderBy=modifiedTime%20desc&fields=files(id,name)&pageSize=10`,
+          { cache: 'no-store' }
         )
         if (globalRes.ok) {
           const globalData = await globalRes.json()
@@ -1973,12 +1993,9 @@ class GoogleClientSide {
   }
 
   /**
-   * Recupera il payload delle categorie sincronizzate dal Cloud (Google Drive _categories.json + Google Calendar Metadata Mirror)
-   * Restituisce sempre la versione più recente (con updatedAt maggiore).
+   * Recupera il payload delle categorie esclusivamente dal file _categories.json su Google Drive
    */
   public async getDriveCategories(): Promise<CategoriesCloudPayload | null> {
-    const candidates: CategoriesCloudPayload[] = []
-
     const normalizePayload = (raw: any): CategoriesCloudPayload | null => {
       if (!raw) return null
       if (Array.isArray(raw) && raw.length > 0) {
@@ -2001,142 +2018,115 @@ class GoogleClientSide {
       return null
     }
 
-    // Canale 1: Google Drive (_categories.json cercato globalmente senza vincolo parent folder per compatibilità drive.file)
-    const drivePromise = (async () => {
-      try {
-        const query = `name = '_categories.json' and trashed = false`
-        const res = await this.fetchWithAuth(
-          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`
+    try {
+      const folderId = await this.resolveDriveFolderId()
+      // Cerca prima il file _categories.json direttamente nella cartella principale di Drive
+      const folderQuery = `'${folderId}' in parents and name = '_categories.json' and trashed = false`
+      let res = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+          folderQuery
+        )}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`,
+        { cache: 'no-store' }
+      )
+
+      let files: any[] = res.ok ? (await res.json()).files || [] : []
+
+      // Fallback globale solo se non trovato nella cartella principale
+      if (files.length === 0) {
+        const globalQuery = `name = '_categories.json' and trashed = false`
+        res = await this.fetchWithAuth(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+            globalQuery
+          )}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`,
+          { cache: 'no-store' }
         )
         if (res.ok) {
-          const data = await res.json()
-          const files: any[] = data.files || []
-          for (const file of files) {
-            if (!file?.id) continue
-            try {
-              const contentRes = await this.fetchWithAuth(
-                `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`
-              )
-              if (contentRes.ok) {
-                const json = await contentRes.json()
-                const parsed = normalizePayload(json)
-                if (parsed) candidates.push(parsed)
-              }
-            } catch { }
-          }
+          files = (await res.json()).files || []
         }
-      } catch (e) {
-        console.warn('[Google Drive Categories] Errore lettura da Drive:', e)
       }
-    })()
 
-    // Canale 2: Google Calendar Metadata Mirror (100% condiviso tra tutti i dispositivi connessi al calendario Segreteria)
-    const calendarPromise = (async () => {
-      try {
-        const calId = await this.resolveCalendarId()
-        const calRes = await this.fetchWithAuth(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`
-        )
-        if (calRes.ok) {
-          const calData = await calRes.json()
-          const desc: string = calData.description || ''
-          const match = desc.match(/\[MEMOTRALCI_CATS_V2:(.+?)\]/s)
-          if (match?.[1]) {
-            const rawJson = JSON.parse(match[1])
-            const parsed = normalizePayload(rawJson)
-            if (parsed) candidates.push(parsed)
-          }
-        }
-      } catch (e) {
-        console.warn('[Google Calendar Categories Mirror] Errore lettura metadati calendario:', e)
-      }
-    })()
+      const targetFile = files[0]
+      if (!targetFile?.id) return null
 
-    await Promise.allSettled([drivePromise, calendarPromise])
+      const contentRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(targetFile.id)}?alt=media`,
+        { cache: 'no-store' }
+      )
+      if (!contentRes.ok) return null
 
-    if (candidates.length === 0) return null
-    candidates.sort((a, b) => b.updatedAt - a.updatedAt)
-    return candidates[0]
+      const json = await contentRes.json()
+      return normalizePayload(json)
+    } catch (e) {
+      console.warn('[Google Drive Categories] Errore lettura _categories.json:', e)
+      return null
+    }
   }
 
   /**
-   * Salva o aggiorna le categorie nel cloud sia su Google Drive (_categories.json) sia nei metadati del Calendario condiviso
+   * Salva o aggiorna le categorie esclusivamente nel singolo file _categories.json su Google Drive
    */
   public async saveDriveCategories(payload: CategoriesCloudPayload): Promise<void> {
-    // Mutex sequenziale per evitare creazione di copie duplicate su salvataggi ravvicinati
     this.saveCategoriesMutex = this.saveCategoriesMutex.then(async () => {
-      // 1. Salva sempre su un UNICO file _categories.json su Google Drive (cestinando eventuali duplicati)
-      const drivePromise = (async () => {
-        try {
-          const folderId = await this.resolveDriveFolderId()
-          await this.uploadOrUpdateJsonFile(
-            folderId,
-            '_categories.json',
-            payload,
-            'Categorie personalizzate MemoTralci (sincronizzate multi-dispositivo v2)'
-          )
-
-          // Pulizia eventuali duplicati residui di _categories.json
-          const catQ = `name = '_categories.json' and trashed = false`
-          const catRes = await this.fetchWithAuth(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
-              catQ
-            )}&orderBy=modifiedTime%20desc&fields=files(id)&pageSize=10`
-          )
-          if (catRes.ok) {
-            const catData = await catRes.json()
-            const list: any[] = catData.files || []
-            for (const dup of list.slice(1)) {
-              if (!dup?.id) continue
-              await this.fetchWithAuth(
-                `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(dup.id)}`,
-                {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ trashed: true }),
-                }
-              ).catch(() => {})
-            }
-          }
-        } catch (e) {
-          console.warn('[Google Drive Categories] Errore salvataggio categorie su Drive:', e)
-        }
-      })()
-
-      // 2. Salva mirror nei metadati del calendario Google condiviso ("Segreteria")
-      const calendarPromise = (async () => {
-        try {
-          const calId = await this.resolveCalendarId()
-          const calRes = await this.fetchWithAuth(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`
-          )
-          let baseDesc = ''
-          if (calRes.ok) {
-            const calData = await calRes.json()
-            baseDesc = (calData.description || '')
-              .replace(/\s*\[MEMOTRALCI_CATS_V2:.+?\]/s, '')
-              .trim()
-          }
-          const tag = `[MEMOTRALCI_CATS_V2:${JSON.stringify(payload)}]`
-          const newDesc = baseDesc ? `${baseDesc}\n\n${tag}` : tag
-
-          await this.fetchWithAuth(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`,
-            {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ description: newDesc }),
-            }
-          )
-        } catch (e) {
-          console.warn('[Google Calendar Categories Mirror] Errore salvataggio metadati calendario:', e)
-        }
-      })()
-
-      await Promise.allSettled([drivePromise, calendarPromise])
+      try {
+        const folderId = await this.resolveDriveFolderId()
+        await this.uploadOrUpdateJsonFile(
+          folderId,
+          '_categories.json',
+          payload,
+          'Categorie MemoTralci'
+        )
+      } catch (e) {
+        console.warn('[Google Drive Categories] Errore salvataggio _categories.json:', e)
+      }
     })
 
     return this.saveCategoriesMutex
+  }
+
+  /**
+   * Recupera le note Post-it sincronizzate da Google Drive (_notes.json)
+   */
+  public async getDriveNotes(): Promise<AppNoteItem[] | null> {
+    try {
+      const query = `name = '_notes.json' and trashed = false`
+      const res = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+          query
+        )}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`,
+        { cache: 'no-store' }
+      )
+      if (!res.ok) return null
+      const data = await res.json()
+      const file = data.files?.[0]
+      if (!file?.id) return []
+      const contentRes = await this.fetchWithAuth(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`,
+        { cache: 'no-store' }
+      )
+      if (!contentRes.ok) return null
+      const parsed = await contentRes.json()
+      return Array.isArray(parsed) ? parsed : []
+    } catch (e) {
+      console.warn('[Google Drive Notes] Errore lettura _notes.json:', e)
+      return null
+    }
+  }
+
+  /**
+   * Salva le note Post-it su Google Drive nella sottocartella Archivio_Note (_notes.json)
+   */
+  public async saveDriveNotes(notes: AppNoteItem[]): Promise<void> {
+    try {
+      const folderId = await this.resolveNotesArchiveFolderId()
+      await this.uploadOrUpdateJsonFile(
+        folderId,
+        '_notes.json',
+        notes,
+        'Note Post-it MemoTralci'
+      )
+    } catch (e) {
+      console.warn('[Google Drive Notes] Errore salvataggio _notes.json:', e)
+    }
   }
 }
 

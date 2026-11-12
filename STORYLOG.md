@@ -7,6 +7,20 @@
 
 ---
 
+## [v2.3.0] — 12 Novembre 2026
+### ✨ Nuova Sezione Note (Post-it), Fix Modalità Scura, Multi-giorno & Sync Esclusivo `_categories.json`
+- **Sezione Note (Post-it):**
+  - Nuova bacheca Post-it con 6 colori pastello, angolo piegato, fissaggio in alto (`Pin`), creazione rapida e categorizzazione uniformata con salvataggio su `IndexedDB` e Google Drive (`_notes.json`).
+- **Fix Modalità Scura & UI:**
+  - Corretto il gradiente dell'intestazione delle modali (`dark:via-slate-900`) per garantire massima leggibilità in modalità scura.
+- **Eventi Multi-giorno & Eliminazione:**
+  - In Agenda e Vista Giorno gli eventi di più giorni mostrano ora chiaramente data e ora di inizio e di fine (`Dal ... al ...`).
+  - Conferma inline per l'eliminazione degli eventi e rimozione immediata dalla vista.
+- **Categorie Esclusive su `_categories.json` & Limite Massimo:**
+  - Rimosso il mirror su Google Calendar; lettura e scrittura avvengono esclusivamente sul file `_categories.json` su Drive con `cache: 'no-store'`, cartella dedicata `Archivio_Note` su Drive e limite massimo a 15 categorie.
+
+---
+
 ## [v2.2.2] — 12 Novembre 2026
 ### 🎨 Pulizia Testata Superiore
 - Rimossi il sottotitolo e il badge della versione dalla testata superiore, lasciando solo il **logo** e **MemoTralci** (la versione resta visibile nel footer in basso).

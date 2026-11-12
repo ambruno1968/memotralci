@@ -12,10 +12,11 @@ import {
   Moon,
   RefreshCw,
   BellRing,
+  StickyNote,
 } from 'lucide-react'
 import type { GoogleStatus } from '../services/api.ts'
 
-export type NavView = 'calendar' | 'tasks' | 'attachments'
+export type NavView = 'calendar' | 'tasks' | 'notes' | 'attachments'
 
 interface NavbarProps {
   currentView: NavView
@@ -26,6 +27,7 @@ interface NavbarProps {
   googleStatus: GoogleStatus
   attachmentsCount: number
   tasksPendingCount: number
+  notesCount?: number
   canInstallPwa: boolean
   onInstallPwa: () => void
   isDark: boolean
@@ -43,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   googleStatus,
   attachmentsCount,
   tasksPendingCount,
+  notesCount = 0,
   canInstallPwa,
   onInstallPwa,
   isDark,
@@ -106,6 +109,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               {tasksPendingCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center font-bold">
                   {tasksPendingCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => onSelectView('notes')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                currentView === 'notes'
+                  ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm font-black'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <StickyNote className="w-4 h-4 text-amber-500" />
+              <span>Note</span>
+              {notesCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-md bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                  {notesCount}
                 </span>
               )}
             </button>
@@ -227,7 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Bottom Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 safe-bottom safe-x shadow-lg">
-        <div className="grid grid-cols-3 py-1.5 px-2">
+        <div className="grid grid-cols-4 py-1.5 px-1">
           <button
             onClick={() => onSelectView('calendar')}
             className={`flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-bold transition ${
@@ -256,7 +276,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </div>
-            <span>Cose da Fare</span>
+            <span>Task</span>
+          </button>
+
+          <button
+            onClick={() => onSelectView('notes')}
+            className={`flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-bold transition ${
+              currentView === 'notes'
+                ? 'text-amber-600 dark:text-amber-400 font-black'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <StickyNote className="w-5 h-5 mb-0.5" />
+            <span>Note</span>
           </button>
 
           <button

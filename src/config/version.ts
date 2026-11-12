@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.2.2'
+export const APP_VERSION = 'v2.3.0'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.2.2',
+  version: '2.3.0',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,18 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.3.0',
+    date: '12/11/2026',
+    title: 'Nuova Sezione Note (Post-it), Fix Modalità Scura, Multi-giorno & Sync Esclusivo _categories.json',
+    type: 'minor',
+    changes: [
+      'Nuova sezione "Note" con schede a forma di Post-it in 6 colori pastello, puntina per fissare in alto, barra rapida e categorizzazione uniformata sincronizzata su Google Drive (_notes.json) e IndexedDB.',
+      'Risolto il problema di leggibilità in modalità scura sulle intestazioni delle modali (Scadenze Imminenti, Evento, Attività).',
+      'Eliminazione eventi resa immediata con conferma inline (senza popup bloccanti) e visualizzazione completa di data e ora di inizio/fine per gli eventi multi-giorno in Agenda e Giorno.',
+      'Sincronizzazione categorie pulita ed esclusiva sul singolo file _categories.json di Google Drive (cartella Archivio_Note dedicata per le note) e limite massimo a 15 categorie.',
+    ],
+  },
   {
     version: '2.2.2',
     date: '12/11/2026',

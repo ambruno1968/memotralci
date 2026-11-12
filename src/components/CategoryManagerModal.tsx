@@ -12,6 +12,7 @@ import {
 import {
   categoryService,
   COLOR_PALETTE,
+  MAX_CATEGORIES,
   type AppCategoryItem,
   type CategoryColorName,
 } from '../services/categoryService.ts'
@@ -33,6 +34,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const [isCreating, setIsCreating] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [newColor, setNewColor] = useState<CategoryColorName>('purple')
+  const [limitError, setLimitError] = useState<string | null>(null)
 
   useEffect(() => {
     return categoryService.subscribe((cats) => {
@@ -74,9 +76,14 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   function handleCreate() {
     if (!newLabel.trim()) return
-    categoryService.addCategory(newLabel.trim(), newColor)
-    setNewLabel('')
-    setIsCreating(false)
+    try {
+      categoryService.addCategory(newLabel.trim(), newColor)
+      setNewLabel('')
+      setIsCreating(false)
+      setLimitError(null)
+    } catch (err: any) {
+      setLimitError(err?.message || 'Bisogna cancellarne una per crearne una nuova')
+    }
   }
 
   function handleResetDefaults() {
@@ -104,7 +111,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 Gestione Categorie
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Modifica nomi, colori o elimina categorie senza perdere i task.
+                Modifica nomi, colori o elimina categorie ({categories.length}/{MAX_CATEGORIES}).
               </p>
             </div>
           </div>
@@ -118,12 +125,25 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
         {/* Content list */}
         <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+          {limitError && (
+            <div className="px-3.5 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{limitError}</span>
+            </div>
+          )}
           {/* Pulsanti azioni rapide */}
           <div className="flex items-center justify-between gap-2">
             {!isCreating && (
               <button
                 type="button"
-                onClick={() => setIsCreating(true)}
+                onClick={() => {
+                  if (categories.length >= MAX_CATEGORIES) {
+                    setLimitError('Bisogna cancellarne una per crearne una nuova')
+                    return
+                  }
+                  setLimitError(null)
+                  setIsCreating(true)
+                }}
                 className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-sm shadow-teal-600/20"
               >
                 <Plus className="w-4 h-4" />

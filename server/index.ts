@@ -10,6 +10,7 @@ import {
   getOAuthAuthUrl,
   handleOAuthCallback,
   disconnectOAuthTokens,
+  getDriveClient,
 } from './googleClient.js'
 import {
   listCalendarEvents,
@@ -287,6 +288,62 @@ app.delete('/api/files/:id', async (req, res) => {
   try {
     const success = await deleteAttachment(req.params.id)
     res.json({ success })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Categories - Direct _categories.json on Google Drive
+app.get('/api/categories', async (_req, res) => {
+  try {
+    const drive = getDriveClient()
+    if (!drive) return res.status(404).json({ error: 'Drive non configurato' })
+    const folderId = config.driveFolderId || '1HMcovycbLn9TKAXs1CmrcSylcDZj0GXc'
+    const listRes = await drive.files.list({
+      q: `'${folderId}' in parents and name = '_categories.json' and trashed = false`,
+      fields: 'files(id, name, modifiedTime)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 5,
+    })
+    const file = listRes.data.files?.[0]
+    if (!file?.id) return res.status(404).json({ error: '_categories.json non trovato' })
+    const contentRes = await drive.files.get({ fileId: file.id, alt: 'media' })
+    const data = typeof contentRes.data === 'string' ? JSON.parse(contentRes.data) : contentRes.data
+    res.json(data)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/categories', async (req, res) => {
+  try {
+    const drive = getDriveClient()
+    if (!drive) return res.status(404).json({ error: 'Drive non configurato' })
+    const folderId = config.driveFolderId || '1HMcovycbLn9TKAXs1CmrcSylcDZj0GXc'
+    const listRes = await drive.files.list({
+      q: `'${folderId}' in parents and name = '_categories.json' and trashed = false`,
+      fields: 'files(id)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 5,
+    })
+    const file = listRes.data.files?.[0]
+    const bodyStr = JSON.stringify(req.body, null, 2)
+    if (file?.id) {
+      await drive.files.update({
+        fileId: file.id,
+        media: { mimeType: 'application/json', body: bodyStr },
+      })
+    } else {
+      await drive.files.create({
+        requestBody: {
+          name: '_categories.json',
+          parents: [folderId],
+          mimeType: 'application/json',
+        },
+        media: { mimeType: 'application/json', body: bodyStr },
+      })
+    }
+    res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }

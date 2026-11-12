@@ -100,6 +100,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [showAudioRecorder, setShowAudioRecorder] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Gestione cambio orario di inizio con aggiornamento automatico orario di fine (uguale o superiore)
   function handleStartChange(newStart: string) {
@@ -240,7 +241,7 @@ export const EventModal: React.FC<EventModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150 safe-top safe-bottom">
       <div className="relative w-full max-w-xl max-h-[88dvh] sm:max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/60 dark:border-slate-800">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50/50 via-white to-purple-50/50 dark:from-slate-800/80 dark:to-slate-800/50 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50/50 via-white to-purple-50/50 dark:from-slate-800/90 dark:via-slate-900 dark:to-slate-800/70 shrink-0">
           <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
             <div className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 shrink-0">
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -520,23 +521,37 @@ export const EventModal: React.FC<EventModalProps> = ({
         {/* Modal Footer */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 shrink-0">
           {isEditing && onDelete ? (
-            <button
-              type="button"
-              onClick={() => {
-                const msg =
-                  attachments.length > 0
-                    ? 'Sei sicuro di voler eliminare questo evento dal calendario? Verranno rimossi anche i relativi allegati collegati.'
-                    : 'Sei sicuro di voler eliminare questo evento dal calendario?'
-                if (confirm(msg)) {
-                  onDelete(event!.id)
-                  onClose()
-                }
-              }}
-              className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Elimina</span>
-            </button>
+            confirmDelete ? (
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(event!.id)
+                    onClose()
+                  }}
+                  className="flex items-center space-x-1 px-3 py-2 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Conferma Elimina</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Elimina</span>
+              </button>
+            )
           ) : (
             <div />
           )}

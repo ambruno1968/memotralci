@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Navbar, type NavView } from './components/Navbar.tsx'
 import { CalendarView } from './components/CalendarView.tsx'
 import { TaskListView } from './components/TaskListView.tsx'
+import { NotesView } from './components/NotesView.tsx'
 import { AttachmentsView } from './components/AttachmentsView.tsx'
 import { EventModal } from './components/EventModal.tsx'
 import { TaskModal } from './components/TaskModal.tsx'
+import { NoteModal } from './components/NoteModal.tsx'
 import { AttachmentModal } from './components/AttachmentModal.tsx'
 import { GoogleSettingsModal } from './components/GoogleSettingsModal.tsx'
 import { PwaInstallBanner } from './components/PwaInstallBanner.tsx'
@@ -14,6 +16,7 @@ import {
 } from './components/UpcomingDeadlinesModal.tsx'
 import type { AppCalendarEvent } from './types/event.ts'
 import type { AppTaskItem } from './types/task.ts'
+import type { AppNoteItem, NoteColor } from './types/note.ts'
 import type { UploadedAttachment } from './types/attachment.ts'
 import { api, clearAppCaches, type GoogleStatus } from './services/api.ts'
 import { googleClientSide } from './services/googleClientSide.ts'
@@ -45,6 +48,7 @@ export function App() {
   const [currentView, setCurrentView] = useState<NavView>('calendar')
   const [events, setEvents] = useState<AppCalendarEvent[]>([])
   const [tasks, setTasks] = useState<AppTaskItem[]>([])
+  const [notes, setNotes] = useState<AppNoteItem[]>([])
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([])
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus>({
     isOnline: false,
@@ -95,6 +99,9 @@ export function App() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<AppTaskItem | null>(null)
 
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false)
+  const [selectedNote, setSelectedNote] = useState<AppNoteItem | null>(null)
+
   const [isGoogleSettingsOpen, setIsGoogleSettingsOpen] = useState(false)
   const [previewAttachment, setPreviewAttachment] = useState<any | null>(null)
   const [isDeadlinesOpen, setIsDeadlinesOpen] = useState(false)
@@ -141,10 +148,11 @@ export function App() {
         await categoryService.syncWithDrive()
       }
 
-      const [status, fetchedEvents, fetchedTasks, fetchedAttachments] = await Promise.all([
+      const [status, fetchedEvents, fetchedTasks, fetchedNotes, fetchedAttachments] = await Promise.all([
         api.getStatus(),
         api.getEvents(),
         api.getTasks(),
+        api.getNotes(),
         api.getAttachments(),
       ])
 
@@ -156,6 +164,7 @@ export function App() {
       setGoogleStatus(status)
       setEvents(fetchedEvents)
       setTasks(fetchedTasks)
+      setNotes(fetchedNotes)
 
       // Eredita la categoria dal task associato se l'allegato non ha ancora categorie assegnate
       const taskCatByAttId = new Map<string, string[]>()
@@ -227,9 +236,9 @@ export function App() {
     }
 
     // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
-    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_2_2')
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_3_0')
     if (!sessionCacheCleared || justConnected) {
-      sessionStorage.setItem('memotralci_cache_cleared_v2_2_2', 'true')
+      sessionStorage.setItem('memotralci_cache_cleared_v2_3_0', 'true')
       loadAllData(justConnected, true)
     } else {
       loadAllData()
@@ -300,8 +309,8 @@ export function App() {
   }
 
   async function handleDeleteEvent(eventId: string) {
-    await api.deleteEvent(eventId)
     setEvents((prev) => prev.filter((e) => e.id !== eventId))
+    await api.deleteEvent(eventId)
   }
 
   // Task handlers
@@ -398,6 +407,57 @@ export function App() {
     }
     const saved = await api.createTask(newTask)
     setTasks((prev) => [saved, ...prev.filter((t) => t.id !== saved.id)])
+  }
+
+  // Note (Post-it) handlers
+  function handleOpenNoteModal(note?: AppNoteItem) {
+    setSelectedNote(note || null)
+    setIsNoteModalOpen(true)
+  }
+
+  async function handleSaveNote(note: AppNoteItem) {
+    setNotes((prev) => {
+      const exists = prev.some((n) => n.id === note.id)
+      if (exists) {
+        return prev.map((n) => (n.id === note.id ? note : n))
+      }
+      return [note, ...prev]
+    })
+    await api.saveNote(note)
+  }
+
+  async function handleQuickAddNote(content: string, color: NoteColor, categoryId?: string) {
+    const now = new Date().toISOString()
+    const cats = categoryId ? [categoryId] : []
+    const newNote: AppNoteItem = {
+      id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      content,
+      color,
+      pinned: false,
+      categories: cats,
+      category: categoryId || undefined,
+      createdAt: now,
+      updatedAt: now,
+    }
+    setNotes((prev) => [newNote, ...prev])
+    await api.saveNote(newNote)
+  }
+
+  async function handleTogglePinNote(id: string) {
+    const target = notes.find((n) => n.id === id)
+    if (!target) return
+    const updated: AppNoteItem = {
+      ...target,
+      pinned: !target.pinned,
+      updatedAt: new Date().toISOString(),
+    }
+    setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)))
+    await api.saveNote(updated)
+  }
+
+  async function handleDeleteNote(id: string) {
+    setNotes((prev) => prev.filter((n) => n.id !== id))
+    await api.deleteNote(id)
   }
 
   // Create Calendar Event from Task
@@ -503,6 +563,7 @@ export function App() {
         googleStatus={googleStatus}
         attachmentsCount={attachments.length}
         tasksPendingCount={pendingTasksCount}
+        notesCount={notes.length}
         canInstallPwa={canInstallPwa}
         onInstallPwa={handleInstallPwa}
         isDark={isDark}
@@ -542,6 +603,16 @@ export function App() {
                 onPreviewAttachment={(att) => setPreviewAttachment(att)}
                 onCreateCalendarEvent={handleCreateCalendarEventFromTask}
                 onQuickAddTask={handleQuickAddTask}
+              />
+            )}
+
+            {currentView === 'notes' && (
+              <NotesView
+                notes={notes}
+                onOpenNoteModal={handleOpenNoteModal}
+                onQuickAddNote={handleQuickAddNote}
+                onTogglePinNote={handleTogglePinNote}
+                onDeleteNote={handleDeleteNote}
               />
             )}
 
@@ -602,6 +673,18 @@ export function App() {
           onDelete={handleDeleteTask}
           onPreviewAttachment={(att) => setPreviewAttachment(att)}
           onCreateCalendarEventFromTask={handleCreateCalendarEventFromTask}
+        />
+      )}
+
+      {isNoteModalOpen && (
+        <NoteModal
+          note={selectedNote}
+          onClose={() => {
+            setIsNoteModalOpen(false)
+            setSelectedNote(null)
+          }}
+          onSave={handleSaveNote}
+          onDelete={handleDeleteNote}
         />
       )}
 

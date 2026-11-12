@@ -176,7 +176,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150 safe-top safe-bottom">
       <div className="relative w-full max-w-xl max-h-[88dvh] sm:max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-white/60 dark:border-slate-800">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-emerald-50/50 via-white to-teal-50/50 dark:from-slate-800/80 dark:to-slate-800/50 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-emerald-50/50 via-white to-teal-50/50 dark:from-slate-800/90 dark:via-slate-900 dark:to-slate-800/70 shrink-0">
           <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
             <div className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/25 shrink-0">
               <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5" />

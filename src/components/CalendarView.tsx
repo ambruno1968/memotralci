@@ -433,13 +433,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <div className="space-y-1.5">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="flex items-center space-x-1 text-xs font-black text-indigo-600 dark:text-indigo-400">
-                              <Clock className="w-3.5 h-3.5" />
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
                               <span>
-                                {evt.allDay
-                                  ? 'Tutto il giorno'
-                                  : `${formatTimeSafe(evt.start)}${
-                                      evt.end ? ` - ${formatTimeSafe(evt.end)}` : ''
-                                    }`}
+                                {(() => {
+                                  const sDay = extractLocalDateStr(evt.start)
+                                  const eDay = extractLocalDateStr(evt.end || evt.start)
+                                  if (eDay > sDay) {
+                                    return evt.allDay
+                                      ? `Dal ${formatDateSafe(evt.start, 'd MMM')} al ${formatDateSafe(evt.end, 'd MMM')}`
+                                      : `Dal ${formatDateSafe(evt.start, 'd MMM')} ${formatTimeSafe(evt.start)} al ${formatDateSafe(evt.end, 'd MMM')} ${formatTimeSafe(evt.end)}`
+                                  }
+                                  return evt.allDay
+                                    ? 'Tutto il giorno'
+                                    : `${formatTimeSafe(evt.start)}${
+                                        evt.end ? ` - ${formatTimeSafe(evt.end)}` : ''
+                                      }`
+                                })()}
                               </span>
                             </span>
 
@@ -856,14 +865,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                   <div className="flex items-center justify-between sm:justify-end space-x-4 text-xs font-semibold text-slate-600 dark:text-slate-300 sm:text-right shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
                     <div>
-                      <p className="text-slate-900 dark:text-white font-black text-sm sm:text-base capitalize">
-                        {formatDateSafe(evt.start, 'EEEE d MMMM yyyy')}
-                      </p>
-                      <p className="text-xs text-indigo-600 dark:text-indigo-400 font-black">
-                        {evt.allDay
-                          ? 'Tutto il giorno'
-                          : `${formatTimeSafe(evt.start)} - ${formatTimeSafe(evt.end)}`}
-                      </p>
+                      {(() => {
+                        const sDay = extractLocalDateStr(evt.start)
+                        const eDay = extractLocalDateStr(evt.end || evt.start)
+                        if (eDay > sDay) {
+                          return (
+                            <>
+                              <p className="text-slate-900 dark:text-white font-black text-xs sm:text-sm capitalize">
+                                Dal {formatDateSafe(evt.start, 'EEE d MMM yyyy')}{' '}
+                                {!evt.allDay && (
+                                  <span className="text-indigo-600 dark:text-indigo-400">
+                                    • {formatTimeSafe(evt.start)}
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-slate-800 dark:text-slate-200 font-black text-xs sm:text-sm capitalize">
+                                Al {formatDateSafe(evt.end, 'EEE d MMM yyyy')}{' '}
+                                <span className="text-indigo-600 dark:text-indigo-400">
+                                  {evt.allDay ? '• Tutto il giorno' : `• ${formatTimeSafe(evt.end)}`}
+                                </span>
+                              </p>
+                            </>
+                          )
+                        }
+                        return (
+                          <>
+                            <p className="text-slate-900 dark:text-white font-black text-sm sm:text-base capitalize">
+                              {formatDateSafe(evt.start, 'EEEE d MMMM yyyy')}
+                            </p>
+                            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-black">
+                              {evt.allDay
+                                ? 'Tutto il giorno'
+                                : `${formatTimeSafe(evt.start)} - ${formatTimeSafe(evt.end)}`}
+                            </p>
+                          </>
+                        )
+                      })()}
                     </div>
 
                     <button

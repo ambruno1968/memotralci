@@ -1,6 +1,7 @@
 import type { AppCalendarEvent } from '../types/event.ts'
 import type { AppTaskItem } from '../types/task.ts'
 import type { UploadedAttachment } from '../types/attachment.ts'
+import type { AppNoteItem } from '../types/note.ts'
 import { localDB } from './db.ts'
 import { googleClientSide, GOOGLE_DEFAULTS, type GoogleUserInfo } from './googleClientSide.ts'
 
@@ -25,6 +26,7 @@ export function isRealAttachment(f: { name?: string; mimeType?: string }): boole
     n === 'tasks.json' ||
     n === '_tasks_index.json' ||
     n === '_categories.json' ||
+    n === '_notes.json' ||
     n.includes('client secret') ||
     n.includes('service-account')
   ) {
@@ -730,6 +732,41 @@ export const api = {
 
     // 3. Eliminazione da cache IndexedDB locale
     await localDB.deleteAttachment(id)
+    return true
+  },
+
+  // Notes (Post-it)
+  async getNotes(): Promise<AppNoteItem[]> {
+    const localNotes = await localDB.getAllNotes()
+    if (googleClientSide.isConnected()) {
+      try {
+        const driveNotes = await googleClientSide.getDriveNotes()
+        if (driveNotes) {
+          await localDB.saveNotes(driveNotes)
+          return driveNotes
+        }
+      } catch (e) {
+        console.warn('[Google Drive Notes] Fallback a IndexedDB locale:', e)
+      }
+    }
+    return localNotes
+  },
+
+  async saveNote(note: AppNoteItem): Promise<AppNoteItem> {
+    await localDB.saveNote(note)
+    if (googleClientSide.isConnected()) {
+      const all = await localDB.getAllNotes()
+      googleClientSide.saveDriveNotes(all).catch(() => {})
+    }
+    return note
+  },
+
+  async deleteNote(id: string): Promise<boolean> {
+    await localDB.deleteNote(id)
+    if (googleClientSide.isConnected()) {
+      const all = await localDB.getAllNotes()
+      googleClientSide.saveDriveNotes(all).catch(() => {})
+    }
     return true
   },
 }
