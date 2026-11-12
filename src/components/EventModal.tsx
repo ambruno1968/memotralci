@@ -13,12 +13,14 @@ import {
   Loader2,
   Mic,
   Music,
+  Share2,
 } from 'lucide-react'
 import type { AppCalendarEvent, EventAttachment } from '../types/event.ts'
 import { api } from '../services/api.ts'
 import { formatFileSize, getFileTypeCategory } from '../utils/file.ts'
 import { AudioRecorder } from './AudioRecorder.tsx'
 import { CategoryPicker } from './CategoryPicker.tsx'
+import { ShareEventModal } from './ShareEventModal.tsx'
 import { normalizeCategories } from '../services/categoryService.ts'
 
 interface EventModalProps {
@@ -101,6 +103,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [dragActive, setDragActive] = useState(false)
   const [showAudioRecorder, setShowAudioRecorder] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
   // Gestione cambio orario di inizio con aggiornamento automatico orario di fine (uguale o superiore)
   function handleStartChange(newStart: string) {
@@ -255,12 +258,25 @@ export const EventModal: React.FC<EventModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1 shrink-0">
+            {title.trim() && (
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(true)}
+                className="p-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition cursor-pointer"
+                title="Condividi evento (WhatsApp / Logo)"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body Form */}
@@ -557,6 +573,17 @@ export const EventModal: React.FC<EventModalProps> = ({
           )}
 
           <div className="flex items-center space-x-2">
+            {title.trim() && (
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(true)}
+                className="flex items-center space-x-1.5 px-3 sm:px-3.5 py-2.5 text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 rounded-xl transition cursor-pointer"
+                title="Condividi evento con logo e locandina"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Condividi</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -579,6 +606,25 @@ export const EventModal: React.FC<EventModalProps> = ({
           </div>
         </div>
       </div>
+
+      {isShareModalOpen && (
+        <ShareEventModal
+          event={{
+            id: event?.id || 'preview',
+            calendarId: event?.calendarId,
+            title: title.trim() || 'Evento',
+            description: description.trim(),
+            location: location.trim(),
+            start,
+            end: !end || end < start ? start : end,
+            allDay,
+            categories,
+            category: categories.length > 0 ? categories.join(',') : undefined,
+            attachments,
+          }}
+          onClose={() => setIsShareModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

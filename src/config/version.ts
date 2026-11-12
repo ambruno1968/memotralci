@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.3.0'
+export const APP_VERSION = 'v2.4.0'
 
 export interface AppCredits {
   appName: string
@@ -25,7 +25,7 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.3.0',
+  version: '2.4.0',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
@@ -36,6 +36,18 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.4.0',
+    date: '12/11/2026',
+    title: 'Condivisione Note con Logo Come Tralci & Tasto Condividi nei Modali',
+    type: 'minor',
+    changes: [
+      'Condivisione delle note Post-it con logo Come Tralci: nuovo pannello con anteprima grafica, messaggio formattato per WhatsApp, condivisione diretta tramite Web Share API e generazione locandina PNG ad alta risoluzione con logo, data, categoria e testo della nota.',
+      'Aggiunto pulsante di condivisione rapida direttamente su ogni card Post-it della bacheca Note.',
+      'Aggiunto pulsante di condivisione con logo all\'interno del modale di Modifica/Dettaglio Evento in Agenda (sia nell\'header accanto alla chiusura che nel footer azioni).',
+      'Aggiunto pulsante di condivisione con logo all\'interno del modale di Modifica Nota Post-it (header e footer).',
+    ],
+  },
   {
     version: '2.3.0',
     date: '12/11/2026',

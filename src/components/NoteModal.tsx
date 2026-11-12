@@ -1,7 +1,13 @@
 import React, { useState } from 'react'
-import { X, StickyNote, Pin, Trash2, Check } from 'lucide-react'
-import { NOTE_COLORS, type AppNoteItem, type NoteColor } from '../types/note.ts'
+import { X, StickyNote, Pin, Trash2, Check, Share2 } from 'lucide-react'
+import {
+  NOTE_COLORS,
+  normalizeNoteCategories,
+  type AppNoteItem,
+  type NoteColor,
+} from '../types/note.ts'
 import { CategoryPicker } from './CategoryPicker.tsx'
+import { ShareNoteModal } from './ShareNoteModal.tsx'
 
 interface NoteModalProps {
   note?: AppNoteItem | null
@@ -22,18 +28,8 @@ export const NoteModal: React.FC<NoteModalProps> = ({
   const [content, setContent] = useState(note?.content || '')
   const [color, setColor] = useState<NoteColor>(note?.color || 'yellow')
   const [pinned, setPinned] = useState<boolean>(Boolean(note?.pinned))
-  const [categories, setCategories] = useState<string[]>(() => {
-    if (Array.isArray(note?.categories) && note.categories.length > 0) {
-      return note.categories.filter((c) => c && c.trim().toLowerCase() !== 'altro')
-    }
-    if (typeof note?.category === 'string' && note.category.trim()) {
-      return note.category
-        .split(',')
-        .map((s) => s.trim())
-        .filter((c) => Boolean(c) && c.toLowerCase() !== 'altro')
-    }
-    return []
-  })
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [categories, setCategories] = useState<string[]>(() => normalizeNoteCategories(note))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,13 +77,25 @@ export const NoteModal: React.FC<NoteModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1 shrink-0">
+            {(content.trim() || title.trim()) && (
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(true)}
+                className="p-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition cursor-pointer"
+                title="Condividi nota (WhatsApp / Logo)"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -186,6 +194,17 @@ export const NoteModal: React.FC<NoteModalProps> = ({
           )}
 
           <div className="flex items-center space-x-2">
+            {(content.trim() || title.trim()) && (
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(true)}
+                className="flex items-center space-x-1.5 px-3 sm:px-3.5 py-2 text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 rounded-xl transition cursor-pointer"
+                title="Condividi nota con logo e locandina"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Condividi</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -205,6 +224,23 @@ export const NoteModal: React.FC<NoteModalProps> = ({
           </div>
         </div>
       </div>
+
+      {isShareModalOpen && (
+        <ShareNoteModal
+          note={{
+            id: note?.id || 'preview',
+            title: title.trim() || undefined,
+            content: content.trim(),
+            color,
+            pinned,
+            categories,
+            category: categories.length > 0 ? categories.join(',') : undefined,
+            createdAt: note?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }}
+          onClose={() => setIsShareModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

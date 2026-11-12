@@ -6,10 +6,17 @@ import {
   Pin,
   Trash2,
   Sparkles,
+  Share2,
 } from 'lucide-react'
-import { NOTE_COLORS, type AppNoteItem, type NoteColor } from '../types/note.ts'
+import {
+  NOTE_COLORS,
+  normalizeNoteCategories,
+  type AppNoteItem,
+  type NoteColor,
+} from '../types/note.ts'
 import { categoryService, type AppCategoryItem } from '../services/categoryService.ts'
 import { formatDateSafe } from '../utils/date.ts'
+import { ShareNoteModal } from './ShareNoteModal.tsx'
 
 interface NotesViewProps {
   notes: AppNoteItem[]
@@ -17,19 +24,6 @@ interface NotesViewProps {
   onQuickAddNote: (content: string, color: NoteColor, categoryId?: string) => void
   onTogglePinNote: (id: string) => void
   onDeleteNote: (id: string) => void
-}
-
-function normalizeNoteCategories(note: AppNoteItem): string[] {
-  if (Array.isArray(note.categories) && note.categories.length > 0) {
-    return note.categories.filter((c) => c && c.trim().toLowerCase() !== 'altro')
-  }
-  if (typeof note.category === 'string' && note.category.trim()) {
-    return note.category
-      .split(',')
-      .map((s) => s.trim())
-      .filter((c) => Boolean(c) && c.toLowerCase() !== 'altro')
-  }
-  return []
 }
 
 export const NotesView: React.FC<NotesViewProps> = ({
@@ -44,6 +38,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [categories, setCategories] = useState<AppCategoryItem[]>(categoryService.getCategories())
+  const [shareNote, setShareNote] = useState<AppNoteItem | null>(null)
 
   useEffect(() => {
     return categoryService.subscribe(setCategories)
@@ -223,6 +218,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   >
                     <button
                       type="button"
+                      onClick={() => setShareNote(note)}
+                      className="p-1.5 rounded-lg opacity-55 hover:opacity-100 hover:text-indigo-600 hover:bg-black/10 dark:hover:bg-white/10 transition cursor-pointer"
+                      title="Condividi nota (WhatsApp / Logo)"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onTogglePinNote(note.id)}
                       className={`p-1.5 rounded-lg transition hover:bg-black/10 dark:hover:bg-white/10 ${
                         note.pinned ? cConf.pin : 'opacity-45 hover:opacity-100'
@@ -280,6 +283,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
             )
           })}
         </div>
+      )}
+
+      {shareNote && (
+        <ShareNoteModal
+          note={shareNote}
+          onClose={() => setShareNote(null)}
+        />
       )}
     </div>
   )

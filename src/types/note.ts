@@ -12,6 +12,20 @@ export interface AppNoteItem {
   updatedAt: string
 }
 
+export function normalizeNoteCategories(note?: AppNoteItem | null): string[] {
+  if (!note) return []
+  if (Array.isArray(note.categories) && note.categories.length > 0) {
+    return note.categories.filter((c) => c && c.trim().toLowerCase() !== 'altro')
+  }
+  if (typeof note.category === 'string' && note.category.trim()) {
+    return note.category
+      .split(',')
+      .map((s) => s.trim())
+      .filter((c) => Boolean(c) && c.toLowerCase() !== 'altro')
+  }
+  return []
+}
+
 export const NOTE_COLORS: Record<
   NoteColor,
   {
