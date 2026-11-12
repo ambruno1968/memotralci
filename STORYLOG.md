@@ -1,9 +1,20 @@
 # 📖 Storylog & Changelog — MemoTralci
 
 **Applicazione:** MemoTralci — Agenda, Note & Allegati  
-**Organizzazione:** Associazione Come Tralci - Novara (*Segreteria Come Tralci Novara*)  
+**Organizzazione:** Come Tralci - Novara (*Segreteria Come Tralci Novara*)  
 **Sviluppato da:** **Bruno Astemio (bam@68)**  
 **Standard di Versionamento:** [SemVer 2.0.0](https://semver.org/lang/it/)
+
+---
+
+## [v2.1.0] — 12 Novembre 2026
+### ✨ Categorie Indipendenti per Documenti & Allegati e Aggiornamento Denominazione
+- **Categorie su Documenti e Allegati (`Gestione Allegati & Documenti`):**
+  - Aggiunta la barra dei filtri per **Categorie** (*Tutte*, *Senza categoria* e categorie personalizzate) nella sezione Documenti.
+  - Ogni scheda documento mostra i badge delle categorie assegnate e dispone del pulsante **Categorie** per assegnare, modificare, creare o gestire le categorie del file indipendentemente da task ed eventi.
+  - Le categorie dei documenti vengono salvate sia in locale (`IndexedDB`) sia nei metadati `appProperties` di **Google Drive** per la sincronizzazione tra dispositivi.
+- **Denominazione:**
+  - Rimossa la parola *"Associazione"* da tutti i riferimenti nel progetto, mantenendo **"Come Tralci - Novara"**.
 
 ---
 

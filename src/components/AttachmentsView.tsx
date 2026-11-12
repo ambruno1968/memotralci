@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Paperclip,
   Upload,
@@ -11,38 +11,66 @@ import {
   FolderOpen,
   Loader2,
   Music,
+  Tag,
+  X,
 } from 'lucide-react'
 import type { UploadedAttachment } from '../types/attachment.ts'
 import { isRealAttachment } from '../services/api.ts'
+import { categoryService, type AppCategoryItem } from '../services/categoryService.ts'
+import { CategoryPicker } from './CategoryPicker.tsx'
 import { formatFileSize, getFileTypeCategory } from '../utils/file.ts'
 import { formatDateSafe } from '../utils/date.ts'
 
 interface AttachmentsViewProps {
   attachments: UploadedAttachment[]
-  onUploadFile: (file: File) => Promise<UploadedAttachment>
+  onUploadFile: (file: File, categories?: string[]) => Promise<UploadedAttachment>
   onDeleteAttachment: (id: string) => void
+  onUpdateAttachmentCategories: (id: string, categories: string[]) => Promise<void>
   onPreviewAttachment: (att: any) => void
   isGoogleDriveConfigured: boolean
+}
+
+function normalizeAttCategories(att: UploadedAttachment): string[] {
+  if (Array.isArray(att.categories) && att.categories.length > 0) {
+    return att.categories.filter((c) => c && c.trim().length > 0)
+  }
+  if (typeof att.category === 'string' && att.category.trim()) {
+    return att.category
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+  return []
 }
 
 export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
   attachments,
   onUploadFile,
   onDeleteAttachment,
+  onUpdateAttachmentCategories,
   onPreviewAttachment,
   isGoogleDriveConfigured,
 }) => {
   const [filterType, setFilterType] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [categories, setCategories] = useState<AppCategoryItem[]>(categoryService.getCategories())
   const [searchQuery, setSearchQuery] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [editingCatAttId, setEditingCatAttId] = useState<string | null>(null)
+
+  useEffect(() => {
+    return categoryService.subscribe(setCategories)
+  }, [])
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setIsUploading(true)
+    const defaultCats =
+      selectedCategory !== 'all' && selectedCategory !== 'none' ? [selectedCategory] : []
     try {
       for (const file of Array.from(files)) {
-        await onUploadFile(file)
+        await onUploadFile(file, defaultCats)
       }
     } finally {
       setIsUploading(false)
@@ -54,11 +82,25 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
   const filteredAttachments = realAttachments.filter((att) => {
     const cat = getFileTypeCategory(att.mimeType, att.name)
     if (filterType !== 'all' && cat !== filterType) return false
+
+    if (selectedCategory !== 'all') {
+      const attCats = normalizeAttCategories(att)
+      if (selectedCategory === 'none') {
+        if (attCats.length > 0) return false
+      } else {
+        if (!attCats.includes(selectedCategory)) return false
+      }
+    }
+
     if (searchQuery.trim()) {
       if (!att.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
     }
     return true
   })
+
+  const editingAttachment = editingCatAttId
+    ? realAttachments.find((a) => a.id === editingCatAttId) || null
+    : null
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -146,41 +188,88 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
       </div>
 
       {/* Filter and Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-3.5 rounded-3xl border border-white/80 dark:border-slate-800 shadow-md shadow-indigo-950/5">
-        {/* Category filters */}
-        <div className="flex items-center space-x-1 bg-slate-100/80 dark:bg-slate-800 p-1 rounded-2xl overflow-x-auto">
-          {[
-            { id: 'all', label: 'Tutti i file' },
-            { id: 'image', label: 'Immagini' },
-            { id: 'pdf', label: 'PDF' },
-            { id: 'doc', label: 'Documenti' },
-            { id: 'audio', label: 'Note Vocali' },
-            { id: 'archive', label: 'Archivi' },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setFilterType(cat.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
-                filterType === cat.id
-                  ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-white/80 dark:border-slate-800 shadow-md shadow-indigo-950/5 space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+          {/* File type filters */}
+          <div className="flex items-center space-x-1 bg-slate-100/80 dark:bg-slate-800 p-1 rounded-xl sm:rounded-2xl overflow-x-auto">
+            {[
+              { id: 'all', label: 'Tutti i file' },
+              { id: 'image', label: 'Immagini' },
+              { id: 'pdf', label: 'PDF' },
+              { id: 'doc', label: 'Documenti' },
+              { id: 'audio', label: 'Note Vocali' },
+              { id: 'archive', label: 'Archivi' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setFilterType(cat.id)}
+                className={`px-3 sm:px-3.5 py-1.5 rounded-lg sm:rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                  filterType === cat.id
+                    ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cerca nome file..."
+              className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+            />
+          </div>
         </div>
 
-        {/* Search */}
-        <div className="relative sm:w-64">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cerca nome file..."
-            className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500 font-medium"
-          />
+        {/* Category Filter Chips Bar */}
+        <div className="flex items-center space-x-2 overflow-x-auto pt-2.5 border-t border-slate-100 dark:border-slate-800">
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+            Categorie:
+          </span>
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3 py-1 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer ${
+              selectedCategory === 'all'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            Tutte
+          </button>
+          <button
+            onClick={() => setSelectedCategory('none')}
+            className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+              selectedCategory === 'none'
+                ? 'bg-slate-700 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            Senza categoria
+          </button>
+          {categories.map((cat) => {
+            const style = categoryService.getCategoryStyle(cat.id)
+            const isActive = selectedCategory === cat.id
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center space-x-1.5 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap border transition cursor-pointer ${
+                  isActive
+                    ? `${style.badge} ring-2 ring-purple-500 shadow-xs border-transparent`
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                <span>{cat.label}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -199,6 +288,7 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {filteredAttachments.map((att) => {
             const cat = getFileTypeCategory(att.mimeType, att.name)
+            const attCategories = normalizeAttCategories(att)
 
             return (
               <div
@@ -234,15 +324,30 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
                     <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
                       {formatFileSize(att.size)} • {formatDateSafe(att.createdTime)}
                     </p>
-                    <span
-                      className={`inline-block mt-1.5 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
-                        att.isLocal
-                          ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300'
-                          : 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300'
-                      }`}
-                    >
-                      {att.isLocal ? 'Locale' : 'Google Drive'}
-                    </span>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`inline-block text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
+                          att.isLocal
+                            ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300'
+                        }`}
+                      >
+                        {att.isLocal ? 'Locale' : 'Google Drive'}
+                      </span>
+
+                      {attCategories.map((cId) => {
+                        const style = categoryService.getCategoryStyle(cId)
+                        return (
+                          <span
+                            key={cId}
+                            className={`inline-flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${style.badge}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                            <span>{style.label}</span>
+                          </span>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -253,6 +358,15 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
                   </span>
 
                   <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCatAttId(att.id)}
+                      className="flex items-center space-x-1 px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50 rounded-lg transition cursor-pointer"
+                      title="Assegna o modifica categorie del documento"
+                    >
+                      <Tag className="w-3.5 h-3.5" />
+                      <span>Categorie</span>
+                    </button>
                     {att.webViewLink && (
                       <a
                         href={att.webViewLink}
@@ -281,6 +395,57 @@ export const AttachmentsView: React.FC<AttachmentsViewProps> = ({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Modale Assegnazione Categorie Documento */}
+      {editingAttachment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150 safe-top safe-bottom"
+          onClick={() => setEditingCatAttId(null)}
+        >
+          <div
+            className="relative w-full max-w-md max-h-[88dvh] bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-white/60 dark:border-slate-800 overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 shrink-0">
+              <div className="min-w-0 pr-2">
+                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate">
+                  Categorie Documento
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {editingAttachment.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCatAttId(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1">
+              <CategoryPicker
+                values={normalizeAttCategories(editingAttachment)}
+                onChange={(nextCats) => {
+                  onUpdateAttachmentCategories(editingAttachment.id, nextCats)
+                }}
+                label="Assegna Categorie"
+              />
+            </div>
+
+            <div className="px-4 py-3 sm:px-5 sm:py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditingCatAttId(null)}
+                className="px-5 py-2 text-xs font-black text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow-md transition cursor-pointer"
+              >
+                Fatto
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -8,5 +8,7 @@ export interface UploadedAttachment {
   thumbnailLink?: string
   createdTime: string
   isLocal?: boolean
+  category?: string
+  categories?: string[]
 }
 

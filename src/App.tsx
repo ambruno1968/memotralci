@@ -168,9 +168,9 @@ export function App() {
     }
 
     // All'accesso o primo avvio di sessione, pulisce la cache completamente in automatico e sincronizza
-    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_0_3')
+    const sessionCacheCleared = sessionStorage.getItem('memotralci_cache_cleared_v2_1_0')
     if (!sessionCacheCleared || justConnected) {
-      sessionStorage.setItem('memotralci_cache_cleared_v2_0_3', 'true')
+      sessionStorage.setItem('memotralci_cache_cleared_v2_1_0', 'true')
       loadAllData(justConnected, true)
     } else {
       loadAllData()
@@ -325,10 +325,22 @@ export function App() {
   }
 
   // Attachment handlers
-  async function handleUploadFile(file: File) {
-    const uploaded = await api.uploadFile(file)
+  async function handleUploadFile(file: File, categories: string[] = []) {
+    const uploaded = await api.uploadFile(file, categories)
     setAttachments((prev) => [uploaded, ...prev])
     return uploaded
+  }
+
+  async function handleUpdateAttachmentCategories(id: string, categories: string[]) {
+    const cleanCats = categories.filter((c) => c && c.trim().length > 0)
+    setAttachments((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? { ...a, categories: cleanCats, category: cleanCats.length > 0 ? cleanCats.join(',') : undefined }
+          : a
+      )
+    )
+    await api.updateAttachmentCategories(id, cleanCats)
   }
 
   async function handleDeleteAttachment(id: string) {
@@ -398,6 +410,7 @@ export function App() {
                 attachments={attachments}
                 onUploadFile={handleUploadFile}
                 onDeleteAttachment={handleDeleteAttachment}
+                onUpdateAttachmentCategories={handleUpdateAttachmentCategories}
                 onPreviewAttachment={(att) => setPreviewAttachment(att)}
                 isGoogleDriveConfigured={googleStatus.isGoogleConfigured}
               />

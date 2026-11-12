@@ -113,7 +113,7 @@ class GoogleClientSide {
 
       // Se il token di accesso è assente o in scadenza, rinnovalo subito silenziosamente via HTTP
       if (!this.getToken() && this.isConnected()) {
-        this.silentRefreshToken().catch(() => {})
+        this.silentRefreshToken().catch(() => { })
       }
     } catch (e) {
       console.warn('[Google Auth] Errore ripristino sessione da IndexedDB:', e)
@@ -138,7 +138,7 @@ class GoogleClientSide {
         taskFolderId: this.cachedTaskFolderId,
         explicitlyDisconnected,
       })
-    } catch {}
+    } catch { }
   }
 
   // Monitora visibilità pagina, ritorno online e focus per rinnovare automaticamente il token
@@ -150,7 +150,7 @@ class GoogleClientSide {
       const exp = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES)
       const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
       if (!token || !exp || Number(exp) - Date.now() < 15 * 60 * 1000) {
-        this.silentRefreshToken().catch(() => {})
+        this.silentRefreshToken().catch(() => { })
       }
     }
 
@@ -198,7 +198,7 @@ class GoogleClientSide {
       if (localStorage.getItem(STORAGE_KEYS.EXPLICIT_LOGOUT) === 'true') {
         return false
       }
-    } catch {}
+    } catch { }
 
     const token = this.getToken()
     if (token && token.trim().length > 10) return true
@@ -206,7 +206,7 @@ class GoogleClientSide {
     const refreshToken = this.getRefreshToken()
     const user = this.getUserInfo()
     if ((user && user.email) || refreshToken) {
-      this.silentRefreshToken().catch(() => {})
+      this.silentRefreshToken().catch(() => { })
       return true
     }
     return false
@@ -232,7 +232,7 @@ class GoogleClientSide {
         const expNum = Number(exp)
         // Se mancano meno di 10 minuti, avvia il rinnovo in background
         if (Date.now() > expNum - 10 * 60 * 1000) {
-          this.silentRefreshToken().catch(() => {})
+          this.silentRefreshToken().catch(() => { })
         }
         if (Date.now() > expNum) {
           return null
@@ -300,7 +300,7 @@ class GoogleClientSide {
     try {
       localStorage.removeItem(STORAGE_KEYS.TOKEN)
       localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES)
-    } catch {}
+    } catch { }
   }
 
   // Chiamato SOLO quando l'utente clicca esplicitamente su "Disconnetti"
@@ -319,8 +319,8 @@ class GoogleClientSide {
       this.cachedCalendarId = null
       this.cachedFolderId = null
       this.cachedTaskFolderId = null
-      localDB.clearAuthSession().catch(() => {})
-    } catch {}
+      localDB.clearAuthSession().catch(() => { })
+    } catch { }
   }
 
   public getUserInfo(): GoogleUserInfo | null {
@@ -541,7 +541,7 @@ class GoogleClientSide {
                       if (uRes.ok) {
                         user = await uRes.json()
                       }
-                    } catch {}
+                    } catch { }
 
                     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
                     await this.persistSessionToIndexedDB()
@@ -549,7 +549,7 @@ class GoogleClientSide {
                     try {
                       await this.resolveCalendarId()
                       await this.resolveDriveFolderId()
-                    } catch {}
+                    } catch { }
 
                     resolve({ token, user })
                     return
@@ -602,7 +602,7 @@ class GoogleClientSide {
                 if (uRes.ok) {
                   user = await uRes.json()
                 }
-              } catch {}
+              } catch { }
 
               localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
               await this.persistSessionToIndexedDB()
@@ -610,7 +610,7 @@ class GoogleClientSide {
               try {
                 await this.resolveCalendarId()
                 await this.resolveDriveFolderId()
-              } catch {}
+              } catch { }
 
               resolve({ token, user })
             } else {
@@ -652,7 +652,7 @@ class GoogleClientSide {
       }
       map[evt.id] = { event: evt, savedAt: now }
       localStorage.setItem(STORAGE_KEYS.RECENT_EVENTS, JSON.stringify(map))
-    } catch {}
+    } catch { }
   }
 
   private getRecentEvents(): AppCalendarEvent[] {
@@ -687,7 +687,7 @@ class GoogleClientSide {
         delArr.push(id)
         localStorage.setItem(STORAGE_KEYS.DELETED_EVENTS, JSON.stringify(delArr.slice(-200)))
       }
-    } catch {}
+    } catch { }
   }
 
   private getDeletedEventIds(): Set<string> {
@@ -874,7 +874,7 @@ class GoogleClientSide {
                   (c: any) => typeof c === 'string' && c.trim() && c.trim().toLowerCase() !== 'altro'
                 )
               }
-            } catch {}
+            } catch { }
           }
 
           const rawCat = extProps.category
@@ -1196,7 +1196,18 @@ class GoogleClientSide {
     return GOOGLE_DEFAULTS.driveFolderId
   }
 
-  public async uploadFile(file: File): Promise<UploadedAttachment> {
+  private parseDriveAttachmentCategories(appProperties?: Record<string, string>): string[] {
+    if (!appProperties?.memotralci_categories) return []
+    try {
+      const parsed = JSON.parse(appProperties.memotralci_categories)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((c) => typeof c === 'string' && c.trim().length > 0)
+      }
+    } catch { }
+    return []
+  }
+
+  public async uploadFile(file: File, categories: string[] = []): Promise<UploadedAttachment> {
     const folderId = await this.resolveDriveFolderId()
 
     // Preparazione multipart upload nativo
@@ -1204,10 +1215,16 @@ class GoogleClientSide {
     const delimiter = `\r\n--${boundary}\r\n`
     const closeDelim = `\r\n--${boundary}--`
 
-    const metadata = {
+    const cleanCats = categories.filter((c) => c && c.trim().length > 0)
+    const metadata: Record<string, any> = {
       name: file.name,
       parents: [folderId],
       mimeType: file.type || 'application/octet-stream',
+    }
+    if (cleanCats.length > 0) {
+      metadata.appProperties = {
+        memotralci_categories: JSON.stringify(cleanCats),
+      }
     }
 
     const metadataPart = new Blob(
@@ -1224,7 +1241,7 @@ class GoogleClientSide {
     const multipartBody = new Blob([metadataPart, file, endPart])
 
     const uploadRes = await this.fetchWithAuth(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,webContentLink,createdTime',
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties',
       {
         method: 'POST',
         headers: {
@@ -1249,7 +1266,10 @@ class GoogleClientSide {
         },
         body: JSON.stringify({ role: 'reader', type: 'anyone' }),
       })
-    } catch {}
+    } catch { }
+
+    const uploadedCats = this.parseDriveAttachmentCategories(uploaded.appProperties)
+    const finalCats = uploadedCats.length > 0 ? uploadedCats : cleanCats
 
     return {
       id: uploaded.id,
@@ -1260,6 +1280,29 @@ class GoogleClientSide {
       webContentLink: uploaded.webContentLink,
       createdTime: uploaded.createdTime || new Date().toISOString(),
       isLocal: false,
+      categories: finalCats,
+      category: finalCats.length > 0 ? finalCats.join(',') : undefined,
+    }
+  }
+
+  public async updateDriveFileCategories(fileId: string, categories: string[]): Promise<void> {
+    const cleanCats = categories.filter((c) => c && c.trim().length > 0)
+    const res = await this.fetchWithAuth(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,appProperties`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          appProperties: {
+            memotralci_categories: JSON.stringify(cleanCats),
+          },
+        }),
+      }
+    )
+    if (!res.ok) {
+      throw new Error(`Errore aggiornamento categorie file Drive (${res.status}): ${res.statusText}`)
     }
   }
 
@@ -1270,7 +1313,7 @@ class GoogleClientSide {
     const res = await this.fetchWithAuth(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
         query
-      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime)&pageSize=100&orderBy=createdTime%20desc`
+      )}&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties)&pageSize=100&orderBy=createdTime%20desc`
     )
 
     if (!res.ok) return []
@@ -1297,16 +1340,21 @@ class GoogleClientSide {
       return true
     })
 
-    return realFiles.map((f) => ({
-      id: f.id,
-      name: f.name,
-      mimeType: f.mimeType,
-      size: Number(f.size || 0),
-      webViewLink: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
-      webContentLink: f.webContentLink,
-      createdTime: f.createdTime || new Date().toISOString(),
-      isLocal: false,
-    }))
+    return realFiles.map((f) => {
+      const cats = this.parseDriveAttachmentCategories(f.appProperties)
+      return {
+        id: f.id,
+        name: f.name,
+        mimeType: f.mimeType,
+        size: Number(f.size || 0),
+        webViewLink: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+        webContentLink: f.webContentLink,
+        createdTime: f.createdTime || new Date().toISOString(),
+        isLocal: false,
+        categories: cats,
+        category: cats.length > 0 ? cats.join(',') : undefined,
+      }
+    })
   }
 
   // ==========================================
@@ -1426,7 +1474,7 @@ class GoogleClientSide {
           if (globalMatch?.id) existingFileId = globalMatch.id
         }
       }
-    } catch {}
+    } catch { }
 
     const boundary = '-------MEMOTRALCI' + Math.random().toString(36).substring(2)
     const delimiter = `\r\n--${boundary}\r\n`
@@ -1569,7 +1617,7 @@ class GoogleClientSide {
                 loadedTasks.push(t)
               }
             }
-          } catch {}
+          } catch { }
         }
 
         if (loadedTasks.length > 0) {
@@ -1620,7 +1668,7 @@ class GoogleClientSide {
               await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
                 method: 'DELETE',
               })
-            } catch {}
+            } catch { }
           }
         }
       }
@@ -1701,7 +1749,7 @@ class GoogleClientSide {
       localStorage.removeItem(STORAGE_KEYS.CALENDAR_ID)
       localStorage.removeItem(STORAGE_KEYS.FOLDER_ID)
       localStorage.removeItem(STORAGE_KEYS.TASK_FOLDER_ID)
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -1754,7 +1802,7 @@ class GoogleClientSide {
                 const parsed = normalizePayload(json)
                 if (parsed) candidates.push(parsed)
               }
-            } catch {}
+            } catch { }
           }
         }
       } catch (e) {

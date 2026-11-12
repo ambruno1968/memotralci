@@ -564,7 +564,8 @@ export const api = {
   },
 
   // Attachments Upload - Direct Google Drive Sync
-  async uploadFile(file: File): Promise<UploadedAttachment> {
+  async uploadFile(file: File, categories: string[] = []): Promise<UploadedAttachment> {
+    const cleanCats = categories.filter((c) => c && c.trim().length > 0)
     // Convert to dataUrl for immediate local caching & previewing
     const reader = new FileReader()
     const dataUrlPromise = new Promise<string>((resolve) => {
@@ -576,7 +577,7 @@ export const api = {
     // 1. Direct Client-Side Google Drive Upload
     if (googleClientSide.isConnected()) {
       try {
-        const driveAttachment = await googleClientSide.uploadFile(file)
+        const driveAttachment = await googleClientSide.uploadFile(file, cleanCats)
         await localDB.saveAttachment(driveAttachment)
         await localDB.cacheFileData(driveAttachment.id, file.name, file.type, dataUrl)
         return driveAttachment
@@ -597,9 +598,14 @@ export const api = {
 
       if (res.ok) {
         const attachment: UploadedAttachment = await res.json()
-        await localDB.saveAttachment(attachment)
-        await localDB.cacheFileData(attachment.id, file.name, file.type, dataUrl)
-        return attachment
+        const enriched: UploadedAttachment = {
+          ...attachment,
+          categories: cleanCats,
+          category: cleanCats.length > 0 ? cleanCats.join(',') : undefined,
+        }
+        await localDB.saveAttachment(enriched)
+        await localDB.cacheFileData(enriched.id, file.name, file.type, dataUrl)
+        return enriched
       }
     } catch (err) {
       console.warn('Upload API fallito, salvataggio file in locale IndexedDB:', err)
@@ -614,11 +620,42 @@ export const api = {
       size: file.size,
       createdTime: new Date().toISOString(),
       isLocal: true,
+      categories: cleanCats,
+      category: cleanCats.length > 0 ? cleanCats.join(',') : undefined,
     }
 
     await localDB.saveAttachment(localAttachment)
     await localDB.cacheFileData(localId, file.name, file.type, dataUrl)
     return localAttachment
+  },
+
+  async updateAttachmentCategories(
+    id: string,
+    categories: string[]
+  ): Promise<UploadedAttachment | null> {
+    const cleanCats = categories.filter((c) => c && c.trim().length > 0)
+    const allLocal = await localDB.getAllAttachments()
+    const existing = allLocal.find((a) => a.id === id)
+
+    if (existing) {
+      const updated: UploadedAttachment = {
+        ...existing,
+        categories: cleanCats,
+        category: cleanCats.length > 0 ? cleanCats.join(',') : undefined,
+      }
+      await localDB.saveAttachment(updated)
+    }
+
+    if (googleClientSide.isConnected() && !id.startsWith('local_file_')) {
+      try {
+        await googleClientSide.updateDriveFileCategories(id, cleanCats)
+      } catch (err) {
+        console.warn('[Google Drive] Aggiornamento categorie file fallito:', err)
+      }
+    }
+
+    const refreshed = await localDB.getAllAttachments()
+    return refreshed.find((a) => a.id === id) || null
   },
 
   // Get Attachments list (solo allegati veri, esclusi cartelle e file di configurazione/task)
@@ -629,7 +666,14 @@ export const api = {
     if (googleClientSide.isConnected()) {
       try {
         const rawDriveFiles = await googleClientSide.listDriveFiles()
-        const driveFiles = rawDriveFiles.filter(isRealAttachment)
+        const localMap = new Map(localFiles.map((f) => [f.id, f]))
+        const driveFiles = rawDriveFiles.filter(isRealAttachment).map((df) => {
+          if ((!df.categories || df.categories.length === 0) && localMap.get(df.id)?.categories?.length) {
+            const localCats = localMap.get(df.id)!.categories!
+            return { ...df, categories: localCats, category: localCats.join(',') }
+          }
+          return df
+        })
         const driveMap = new Map(driveFiles.map((f) => [f.id, f]))
 
         // Unisci i file locali che non sono ancora su Drive

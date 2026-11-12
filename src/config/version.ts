@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.0.3'
+export const APP_VERSION = 'v2.1.0'
 
 export interface AppCredits {
   appName: string
@@ -25,17 +25,28 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.0.3',
+  version: '2.1.0',
   releaseDate: '12 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
-  organization: 'Associazione Come Tralci - Novara',
+  organization: 'Come Tralci - Novara',
   description: 'PWA Agenda, Gestione Attività (To-Do) & Archiviazione Allegati Google Drive',
   copyright: '© 2026 Come Tralci Novara • Sviluppato da Bruno Astemio (bam@68)',
   contactEmail: 'segreteria.cometralcinovara@gmail.com',
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.1.0',
+    date: '12/11/2026',
+    title: 'Categorie Indipendenti per Documenti & Allegati e Aggiornamento Denominazione',
+    type: 'minor',
+    changes: [
+      'Aggiunte le Categorie anche in "Gestione Allegati & Documenti", completamente indipendenti da task ed eventi: ogni documento può avere una o più categorie assegnate, modificate e filtrate.',
+      'Sincronizzazione cloud delle categorie dei documenti tramite appProperties su Google Drive e salvataggio in locale su IndexedDB.',
+      'Aggiornata la denominazione ufficiale in "Come Tralci - Novara" rimuovendo la parola "Associazione" da tutti i riferimenti.',
+    ],
+  },
   {
     version: '2.0.3',
     date: '12/11/2026',
