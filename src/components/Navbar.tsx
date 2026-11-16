@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import appLogo from '../assets/logo-icon.png'
-import { AboutWikiModal } from './AboutWikiModal.tsx'
+import { AboutWikiModal, type AboutTabType } from './AboutWikiModal.tsx'
 import {
   CalendarDays,
   CheckSquare,
@@ -13,7 +13,6 @@ import {
   RefreshCw,
   BellRing,
   StickyNote,
-  QrCode,
 } from 'lucide-react'
 import type { GoogleStatus } from '../services/api.ts'
 
@@ -37,7 +36,7 @@ interface NavbarProps {
   isSyncing?: boolean
   onOpenDeadlines?: () => void
   tomorrowDeadlinesCount?: number
-  onOpenAbout?: (initialTab?: 'wiki' | 'qrcode' | 'storylog' | 'credits') => void
+  onOpenAbout?: (initialTab?: AboutTabType) => void
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -59,9 +58,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAbout,
 }) => {
   const [isAboutOpen, setIsAboutOpen] = useState(false)
-  const [aboutInitialTab, setAboutInitialTab] = useState<'wiki' | 'qrcode' | 'storylog' | 'credits'>('wiki')
+  const [aboutInitialTab, setAboutInitialTab] = useState<AboutTabType>('wiki')
 
-  const handleOpenAboutTab = (tab: 'wiki' | 'qrcode' | 'storylog' | 'credits') => {
+  const handleOpenAboutTab = (tab: AboutTabType) => {
     if (onOpenAbout) {
       onOpenAbout(tab)
     } else {
@@ -75,11 +74,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Desktop & Tablet Top Navbar */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/90 dark:border-slate-800 shadow-sm transition-colors duration-200 safe-top safe-x">
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5">
-          {/* Brand Logo con apertura crediti e wiki al click */}
+          {/* Brand Logo con apertura wiki al click */}
           <div
             className="flex items-center space-x-2 sm:space-x-3 cursor-pointer group select-none min-w-0 shrink"
             onClick={() => handleOpenAboutTab('wiki')}
-            title="Clicca per visualizzare logo ingrandito, crediti, versione, QR code e piccola wiki"
+            title="Clicca per visualizzare guida rapida e informazioni"
           >
             <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg shadow-teal-900/25 group-hover:scale-105 group-active:scale-95 transition ring-2 ring-teal-500/40 flex items-center justify-center bg-white dark:bg-slate-800 shrink-0">
               <img
@@ -194,17 +193,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               ) : (
                 <Moon className="w-4 h-4 text-indigo-600" />
               )}
-            </button>
-
-            {/* QR Code Button per scansione da altri cellulari */}
-            <button
-              type="button"
-              onClick={() => handleOpenAboutTab('qrcode')}
-              className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-teal-200 dark:border-teal-800/70 bg-teal-50/90 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 transition shadow-xs cursor-pointer"
-              title="Scansiona QR Code da altri cellulari o installa la PWA"
-              aria-label="QR Code PWA"
-            >
-              <QrCode className="w-4 h-4 text-teal-600 dark:text-teal-400" />
             </button>
 
             {/* Install PWA Button if available */}

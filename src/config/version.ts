@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.5.0'
+export const APP_VERSION = 'v2.5.1'
 
 export interface AppCredits {
   appName: string
@@ -25,8 +25,8 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.5.0',
-  releaseDate: '12 Novembre 2026',
+  version: '2.5.1',
+  releaseDate: '16 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
   organization: 'Come Tralci - Novara',
@@ -36,6 +36,16 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.5.1',
+    date: '16/11/2026',
+    title: 'Pulizia UI: QR Code e Crediti solo nella pagina Crediti & Note',
+    type: 'patch',
+    changes: [
+      'Rimossi i QR code e i crediti dalla barra superiore, dal footer, dalle impostazioni Google e dalle immagini condivise.',
+      'Rimossa la scheda dedicata QR Code PWA dalla modale informazioni; QR code e crediti restano visibili esclusivamente nella scheda Crediti & Note.',
+    ],
+  },
   {
     version: '2.5.0',
     date: '12/11/2026',

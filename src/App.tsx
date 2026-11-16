@@ -22,8 +22,8 @@ import { api, clearAppCaches, type GoogleStatus } from './services/api.ts'
 import { googleClientSide } from './services/googleClientSide.ts'
 import { categoryService } from './services/categoryService.ts'
 import { notificationService } from './services/notifications.ts'
-import { Loader2, CheckCircle, QrCode } from 'lucide-react'
-import { APP_VERSION, APP_CREDITS } from './config/version.ts'
+import { Loader2, CheckCircle } from 'lucide-react'
+import { APP_VERSION } from './config/version.ts'
 import { AboutWikiModal, type AboutTabType } from './components/AboutWikiModal.tsx'
 
 function normalizeTaskCategories(task: AppTaskItem): string[] {
@@ -639,43 +639,23 @@ export function App() {
         )}
       </main>
 
-      {/* Footer con Versione, Crediti e QR Code PWA */}
+      {/* Footer */}
       <footer className="mt-auto border-t border-slate-200/60 dark:border-slate-800 pt-4 pb-24 md:py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 flex flex-col sm:flex-row items-center justify-between gap-3 font-medium">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              onClick={() => handleOpenAbout('wiki')}
-              className="font-bold text-slate-700 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 transition cursor-pointer"
-              title="Apri Piccola Wiki e Guida"
-            >
-              MemoTralci
-            </button>
-            <button
-              onClick={() => handleOpenAbout('credits')}
-              className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 hover:opacity-80 transition cursor-pointer"
-              title="Visualizza Crediti & Note"
-            >
-              {APP_VERSION}
-            </button>
-            <span>•</span>
-            <span>{APP_CREDITS.developedFor}</span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => handleOpenAbout('qrcode')}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300 font-bold hover:bg-teal-100 dark:hover:bg-teal-900/80 transition cursor-pointer shadow-xs"
-              title="Mostra QR Code per scansionare da altri cellulari"
-            >
-              <QrCode className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Scansiona QR Code PWA</span>
-            </button>
-          </div>
-
-          <div>
-            <span>{APP_CREDITS.copyright}</span>
-          </div>
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 flex items-center justify-center gap-2 font-medium">
+          <button
+            onClick={() => handleOpenAbout('wiki')}
+            className="font-bold text-slate-700 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 transition cursor-pointer"
+            title="Apri Piccola Wiki e Guida"
+          >
+            MemoTralci
+          </button>
+          <button
+            onClick={() => handleOpenAbout('credits')}
+            className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 hover:opacity-80 transition cursor-pointer"
+            title="Visualizza Crediti & Note"
+          >
+            {APP_VERSION}
+          </button>
         </div>
       </footer>
 

@@ -333,7 +333,7 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
     ctx.fillStyle = '#94a3b8'
     ctx.font = '600 16px system-ui, -apple-system, sans-serif'
     ctx.fillText(
-      `${APP_CREDITS.organization} • Sviluppato da ${APP_CREDITS.developedBy}`,
+      APP_CREDITS.organization,
       cardX + 38,
       cardY + cardH - 24
     )
