@@ -552,6 +552,35 @@ export function App() {
   async function handleDeleteAttachment(id: string) {
     await api.deleteAttachment(id)
     setAttachments((prev) => prev.filter((a) => a.id !== id))
+
+    // Rimuovi il riferimento all'allegato eliminato da eventuali task o eventi collegati
+    const affectedTasks = tasks.filter((t) => t.attachments?.some((a) => a.id === id))
+    if (affectedTasks.length > 0) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.attachments?.some((a) => a.id === id)
+            ? { ...t, attachments: t.attachments.filter((a) => a.id !== id) }
+            : t
+        )
+      )
+      for (const t of affectedTasks) {
+        api.saveTask({ ...t, attachments: t.attachments!.filter((a) => a.id !== id) }).catch(() => {})
+      }
+    }
+
+    const affectedEvents = events.filter((ev) => ev.attachments?.some((a) => a.id === id))
+    if (affectedEvents.length > 0) {
+      setEvents((prev) =>
+        prev.map((ev) =>
+          ev.attachments?.some((a) => a.id === id)
+            ? { ...ev, attachments: ev.attachments.filter((a) => a.id !== id) }
+            : ev
+        )
+      )
+      for (const ev of affectedEvents) {
+        api.updateEvent(ev.id, { attachments: ev.attachments!.filter((a) => a.id !== id) }).catch(() => {})
+      }
+    }
   }
 
   const pendingTasksCount = tasks.filter((t) => !t.completed).length

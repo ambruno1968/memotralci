@@ -104,6 +104,36 @@ function unmarkTaskAsDeleted(taskId: string) {
   } catch {}
 }
 
+// Gestione eliminazioni definitive (Tombstones) per prevenire la ricomparsa degli allegati eliminati
+const DELETED_ATTACHMENTS_KEY = 'memotralci_deleted_attachments'
+
+function getDeletedAttachmentIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_ATTACHMENTS_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function markAttachmentAsDeleted(id: string) {
+  try {
+    const set = getDeletedAttachmentIds()
+    set.add(id)
+    const arr = Array.from(set).slice(-300)
+    localStorage.setItem(DELETED_ATTACHMENTS_KEY, JSON.stringify(arr))
+  } catch {}
+}
+
+function unmarkAttachmentAsDeleted(id: string) {
+  try {
+    const set = getDeletedAttachmentIds()
+    if (set.delete(id)) {
+      localStorage.setItem(DELETED_ATTACHMENTS_KEY, JSON.stringify(Array.from(set)))
+    }
+  } catch {}
+}
+
 export const api = {
   // Check Google status (Direct Client-Side or Backend Fallback)
   async getStatus(): Promise<GoogleStatus> {
@@ -662,26 +692,55 @@ export const api = {
 
   // Get Attachments list (solo allegati veri, esclusi cartelle e file di configurazione/task)
   async getAttachments(): Promise<UploadedAttachment[]> {
+    const deletedIds = getDeletedAttachmentIds()
     const rawLocalFiles = await localDB.getAllAttachments()
-    const localFiles = rawLocalFiles.filter(isRealAttachment)
+    const localFiles = rawLocalFiles.filter((f) => isRealAttachment(f) && !deletedIds.has(f.id))
 
     if (googleClientSide.isConnected()) {
       try {
-        const rawDriveFiles = await googleClientSide.listDriveFiles()
-        const localMap = new Map(localFiles.map((f) => [f.id, f]))
-        const driveFiles = rawDriveFiles.filter(isRealAttachment).map((df) => {
-          if ((!df.categories || df.categories.length === 0) && localMap.get(df.id)?.categories?.length) {
-            const localCats = localMap.get(df.id)!.categories!
-            return { ...df, categories: localCats, category: localCats.join(',') }
+        // 1. Completa eventuali eliminazioni rimaste in sospeso su Google Drive
+        if (deletedIds.size > 0 && (typeof navigator === 'undefined' || navigator.onLine)) {
+          for (const delId of Array.from(deletedIds)) {
+            if (delId.startsWith('local_file_')) {
+              unmarkAttachmentAsDeleted(delId)
+              continue
+            }
+            const ok = await googleClientSide.deleteDriveFile(delId)
+            if (ok) {
+              unmarkAttachmentAsDeleted(delId)
+            }
           }
-          return df
-        })
+        }
+
+        const activeDeletedIds = getDeletedAttachmentIds()
+        const rawDriveFiles = await googleClientSide.listDriveFiles()
+        const rawDriveIds = new Set(rawDriveFiles.map((f) => f.id))
+
+        // Se un file marcato come eliminato non esiste più su Drive, pulisci il tombstone
+        for (const delId of Array.from(activeDeletedIds)) {
+          if (!rawDriveIds.has(delId)) {
+            unmarkAttachmentAsDeleted(delId)
+          }
+        }
+
+        const finalDeletedIds = getDeletedAttachmentIds()
+        const localMap = new Map(localFiles.map((f) => [f.id, f]))
+        const driveFiles = rawDriveFiles
+          .filter((f) => isRealAttachment(f) && !finalDeletedIds.has(f.id))
+          .map((df) => {
+            if ((!df.categories || df.categories.length === 0) && localMap.get(df.id)?.categories?.length) {
+              const localCats = localMap.get(df.id)!.categories!
+              return { ...df, categories: localCats, category: localCats.join(',') }
+            }
+            return df
+          })
         const driveMap = new Map(driveFiles.map((f) => [f.id, f]))
 
-        // Unisci i file locali che non sono ancora su Drive
+        // Unisci SOLO i file creati offline in locale (isLocal === true) non ancora caricati su Drive.
+        // I file remoti (isLocal !== true) assenti da Drive sono stati eliminati su un altro dispositivo e non devono riapparire.
         const merged = [...driveFiles]
         for (const lf of localFiles) {
-          if (!driveMap.has(lf.id)) {
+          if (lf.isLocal === true && !driveMap.has(lf.id) && !finalDeletedIds.has(lf.id)) {
             merged.push(lf)
           }
         }
@@ -696,7 +755,7 @@ export const api = {
       const res = await fetch('/api/files', { signal: AbortSignal.timeout(4000) })
       if (res.ok) {
         const rawFiles: UploadedAttachment[] = await res.json()
-        const files = rawFiles.filter(isRealAttachment)
+        const files = rawFiles.filter((f) => isRealAttachment(f) && !deletedIds.has(f.id))
         await localDB.saveAttachments(files)
         return files
       }
@@ -711,13 +770,20 @@ export const api = {
   async deleteAttachment(id: string): Promise<boolean> {
     if (!id) return false
 
-    // 1. Eliminazione fisica da Google Drive (se autenticato)
-    try {
-      if (googleClientSide.isConnected()) {
-        await googleClientSide.deleteDriveFile(id)
+    // Registra tombstone ed elimina subito dalla cache locale per evitare ricomparse
+    markAttachmentAsDeleted(id)
+    await localDB.deleteAttachment(id)
+
+    // 1. Eliminazione fisica da Google Drive (se autenticato e file remoto)
+    if (googleClientSide.isConnected() && !id.startsWith('local_file_')) {
+      try {
+        const deleted = await googleClientSide.deleteDriveFile(id)
+        if (deleted) {
+          unmarkAttachmentAsDeleted(id)
+        }
+      } catch (e) {
+        console.warn('[API] Errore cancellazione file da Google Drive (verrà ritentata):', e)
       }
-    } catch (e) {
-      console.warn('[API] Errore cancellazione file da Google Drive:', e)
     }
 
     // 2. Eliminazione fisica dal server locale se in esecuzione
@@ -730,8 +796,6 @@ export const api = {
       // Fallback
     }
 
-    // 3. Eliminazione da cache IndexedDB locale
-    await localDB.deleteAttachment(id)
     return true
   },
 

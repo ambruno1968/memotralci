@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.5.1'
+export const APP_VERSION = 'v2.5.2'
 
 export interface AppCredits {
   appName: string
@@ -25,8 +25,8 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.5.1',
-  releaseDate: '16 Novembre 2026',
+  version: '2.5.2',
+  releaseDate: '17 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
   organization: 'Come Tralci - Novara',
@@ -36,6 +36,17 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.5.2',
+    date: '17/11/2026',
+    title: 'Fix Sincronizzazione & Eliminazione Definitiva Allegati tra Dispositivi',
+    type: 'patch',
+    changes: [
+      'Risolto bug in IndexedDB (saveAttachments) che manteneva i vecchi allegati eliminati da altri dispositivi.',
+      'Aggiunto sistema Tombstone per gli allegati e coda di eliminazione automatica su Google Drive per evitare che i file cancellati riappaiano.',
+      'Rimozione automatica dei riferimenti agli allegati eliminati anche da eventuali Task ed Eventi collegati.',
+    ],
+  },
   {
     version: '2.5.1',
     date: '16/11/2026',

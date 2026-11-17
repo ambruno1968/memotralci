@@ -1549,7 +1549,9 @@ class GoogleClientSide {
       { cache: 'no-store' }
     )
 
-    if (!res.ok) return []
+    if (!res.ok) {
+      throw new Error(`Errore lettura allegati Google Drive (${res.status})`)
+    }
 
     const data = await res.json()
     const files: any[] = data.files || []

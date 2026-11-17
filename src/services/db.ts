@@ -133,6 +133,7 @@ export const localDB = {
   async saveAttachments(atts: UploadedAttachment[]): Promise<void> {
     const db = await getDB()
     const tx = db.transaction('attachments', 'readwrite')
+    await tx.store.clear()
     for (const a of atts) {
       await tx.store.put(a)
     }
