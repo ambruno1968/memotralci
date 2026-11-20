@@ -1,7 +1,7 @@
 // Configurazione Versione, Crediti e Storylog MemoTralci
 // Standard SemVer (Semantic Versioning 2.0.0)
 
-export const APP_VERSION = 'v2.5.2'
+export const APP_VERSION = 'v2.6.0'
 
 export interface AppCredits {
   appName: string
@@ -25,8 +25,8 @@ export interface StorylogEntry {
 
 export const APP_CREDITS: AppCredits = {
   appName: 'MemoTralci',
-  version: '2.5.2',
-  releaseDate: '17 Novembre 2026',
+  version: '2.6.0',
+  releaseDate: '20 Novembre 2026',
   developedBy: 'Bruno Astemio (bam@68)',
   developedFor: 'Segreteria Come Tralci Novara',
   organization: 'Come Tralci - Novara',
@@ -36,6 +36,16 @@ export const APP_CREDITS: AppCredits = {
 }
 
 export const APP_STORYLOG: StorylogEntry[] = [
+  {
+    version: '2.6.0',
+    date: '20/11/2026',
+    title: 'Selezione Multipla in Agenda & Condivisione Calendario su WhatsApp',
+    type: 'minor',
+    changes: [
+      'Aggiunta modalità selezione multipla nella scheda Agenda per selezionare più eventi (con caselle di spunta, seleziona/deseleziona tutte e barra azioni rapida).',
+      'Nuova condivisione "Calendario Eventi" su WhatsApp con eventi ordinati cronologicamente e raggruppati per giorno, anteprima dedicata e locandina PNG con logo.',
+    ],
+  },
   {
     version: '2.5.2',
     date: '17/11/2026',

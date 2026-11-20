@@ -15,6 +15,10 @@ import {
   Share2,
   Clock,
   SunMedium,
+  CheckSquare,
+  Square,
+  MessageCircle,
+  X,
 } from 'lucide-react'
 import appLogo from '../assets/logo-icon.png'
 import type { AppCalendarEvent } from '../types/event.ts'
@@ -60,12 +64,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [categories, setCategories] = useState<AppCategoryItem[]>(categoryService.getCategories())
 
-  // Stato per il modale di condivisione elegante (singolo evento o intera giornata)
+  // Stato per il modale di condivisione elegante (singolo evento, intera giornata o calendario selezionato)
   const [shareTarget, setShareTarget] = useState<{
     event?: AppCalendarEvent | null
     dayEvents?: AppCalendarEvent[]
     dayDate?: Date
+    selectedEvents?: AppCalendarEvent[]
   } | null>(null)
+
+  // Selezione multipla nella scheda Agenda per condivisione calendario su WhatsApp
+  const [isAgendaSelectionMode, setIsAgendaSelectionMode] = useState(false)
+  const [selectedAgendaIds, setSelectedAgendaIds] = useState<string[]>([])
 
   useEffect(() => {
     return categoryService.subscribe(setCategories)
@@ -119,6 +128,32 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       return startDay >= todayStr || endDay >= todayStr
     })
     .sort((a, b) => a.start.localeCompare(b.start))
+
+  const selectedAgendaEvents = upcomingAgendaEvents.filter((e) =>
+    selectedAgendaIds.includes(e.id)
+  )
+  const allAgendaSelected =
+    upcomingAgendaEvents.length > 0 &&
+    upcomingAgendaEvents.every((e) => selectedAgendaIds.includes(e.id))
+
+  function toggleAgendaEventSelection(id: string) {
+    setSelectedAgendaIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
+  function handleToggleSelectAllAgenda() {
+    if (allAgendaSelected) {
+      setSelectedAgendaIds([])
+    } else {
+      setSelectedAgendaIds(upcomingAgendaEvents.map((e) => e.id))
+    }
+  }
+
+  function handleExitAgendaSelection() {
+    setIsAgendaSelectionMode(false)
+    setSelectedAgendaIds([])
+  }
 
   // Days for Month grid
   const monthStart = startOfMonth(currentDate)
@@ -786,11 +821,61 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       {/* 3. AGENDA / STREAM VIEW (DA OGGI IN POI) */}
       {mode === 'agenda' && (
         <div className="space-y-3.5">
-          <div className="flex items-center justify-between px-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2">
             <span className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Prossimi eventi in Agenda (da oggi in poi: {upcomingAgendaEvents.length})
             </span>
+
+            {upcomingAgendaEvents.length > 0 && !isAgendaSelectionMode && selectedAgendaIds.length === 0 && (
+              <button
+                type="button"
+                onClick={() => setIsAgendaSelectionMode(true)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-black transition cursor-pointer"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                <span>Seleziona per Calendario WS</span>
+              </button>
+            )}
           </div>
+
+          {/* Barra azioni selezione multipla per condivisione calendario su WhatsApp */}
+          {upcomingAgendaEvents.length > 0 && (isAgendaSelectionMode || selectedAgendaIds.length > 0) && (
+            <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2.5 p-3 sm:p-4 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-2 border-emerald-500/40 shadow-xl shadow-emerald-950/10">
+              <div className="flex items-center space-x-2.5">
+                <span className="px-2.5 py-1 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 text-xs font-black">
+                  {selectedAgendaEvents.length}{' '}
+                  {selectedAgendaEvents.length === 1 ? 'voce selezionata' : 'voci selezionate'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAllAgenda}
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition cursor-pointer"
+                >
+                  {allAgendaSelected ? 'Deseleziona tutte' : 'Seleziona tutte'}
+                </button>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  disabled={selectedAgendaEvents.length === 0}
+                  onClick={() => setShareTarget({ selectedEvents: selectedAgendaEvents })}
+                  className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 disabled:opacity-45 disabled:cursor-not-allowed text-white text-xs font-black shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Condividi Calendario WS</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExitAgendaSelection}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                  title="Annulla selezione"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {upcomingAgendaEvents.length === 0 ? (
             <div className="text-center py-16 bg-white/95 dark:bg-slate-900/95 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 p-8 shadow-sm">
@@ -807,14 +892,47 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const evtCats = normalizeCategories(evt)
               const conf = categoryService.getCategoryStyle(evtCats[0])
               const hasAttachments = Boolean(evt.attachments && evt.attachments.length > 0)
+              const isSelected = selectedAgendaIds.includes(evt.id)
 
               return (
                 <div
                   key={evt.id}
-                  onClick={() => onOpenEventModal(evt)}
-                  className={`p-5 rounded-3xl bg-white/95 dark:bg-slate-900/95 border ${conf.border} hover:border-indigo-500 shadow-md hover:shadow-2xl transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4`}
+                  onClick={() => {
+                    if (isAgendaSelectionMode) {
+                      toggleAgendaEventSelection(evt.id)
+                    } else {
+                      onOpenEventModal(evt)
+                    }
+                  }}
+                  className={`p-5 rounded-3xl transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 border ${
+                    isSelected
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-500 ring-2 ring-emerald-500/40 shadow-lg'
+                      : `bg-white/95 dark:bg-slate-900/95 ${conf.border} hover:border-indigo-500 shadow-md hover:shadow-2xl`
+                  }`}
                 >
-                  <div className="flex items-start space-x-4">
+                  <div className="flex items-start space-x-3 sm:space-x-4">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!isAgendaSelectionMode) setIsAgendaSelectionMode(true)
+                        toggleAgendaEventSelection(evt.id)
+                      }}
+                      className={`mt-1 p-1.5 rounded-xl transition cursor-pointer shrink-0 ${
+                        isSelected
+                          ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60'
+                          : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                      title={isSelected ? 'Deseleziona evento' : 'Seleziona evento per calendario'}
+                      aria-label={isSelected ? 'Deseleziona evento' : 'Seleziona evento'}
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5" />
+                      ) : (
+                        <Square className="w-5 h-5" />
+                      )}
+                    </button>
+
                     <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-md ring-2 ring-teal-500/30 bg-white p-0.5 shrink-0">
                       <img
                         src={appLogo}
@@ -929,6 +1047,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           event={shareTarget.event}
           dayEvents={shareTarget.dayEvents}
           dayDate={shareTarget.dayDate}
+          selectedEvents={shareTarget.selectedEvents}
           onClose={() => setShareTarget(null)}
         />
       )}

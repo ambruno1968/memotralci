@@ -21,6 +21,7 @@ interface ShareEventModalProps {
   event?: AppCalendarEvent | null
   dayEvents?: AppCalendarEvent[]
   dayDate?: Date
+  selectedEvents?: AppCalendarEvent[]
   onClose: () => void
 }
 
@@ -28,23 +29,36 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
   event,
   dayEvents,
   dayDate,
+  selectedEvents,
   onClose,
 }) => {
   const [copied, setCopied] = useState(false)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
 
-  if (!event && (!dayEvents || dayEvents.length === 0)) return null
+  const hasDayEvents = Boolean(dayEvents && dayEvents.length > 0)
+  const hasSelectedEvents = Boolean(selectedEvents && selectedEvents.length > 0)
+
+  if (!event && !hasDayEvents && !hasSelectedEvents) return null
 
   const isSingleEvent = Boolean(event)
+  const isMultiCalendar = !isSingleEvent && hasSelectedEvents
+  const sortedSelected = [...(selectedEvents || [])].sort((a, b) => a.start.localeCompare(b.start))
+
+  function getEventTimeLabel(evt: AppCalendarEvent): string {
+    return evt.allDay
+      ? 'Tutto il giorno'
+      : `${formatTimeSafe(evt.start)}${evt.end ? ` - ${formatTimeSafe(evt.end)}` : ''}`
+  }
+
+  function capitalizeFirst(str: string): string {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : ''
+  }
 
   // Costruisce il testo elegante per WhatsApp / Telegram / Appunti
   function buildFormattedText(): string {
     if (event) {
-      const dateFormatted = formatDateSafe(event.start, 'EEEE d MMMM yyyy')
-      const capitalizedDate = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)
-      const timeStr = event.allDay
-        ? 'Tutto il giorno'
-        : `${formatTimeSafe(event.start)}${event.end ? ` - ${formatTimeSafe(event.end)}` : ''}`
+      const capitalizedDate = capitalizeFirst(formatDateSafe(event.start, 'EEEE d MMMM yyyy'))
+      const timeStr = getEventTimeLabel(event)
 
       const cats = normalizeCategories(event)
         .map((c) => categoryService.getCategoryStyle(c).label)
@@ -78,10 +92,67 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
       return lines.join('\n')
     }
 
+    if (isMultiCalendar) {
+      const firstDateStr = capitalizeFirst(formatDateSafe(sortedSelected[0].start, 'd MMM yyyy'))
+      const lastDateStr = capitalizeFirst(
+        formatDateSafe(sortedSelected[sortedSelected.length - 1].start, 'd MMM yyyy')
+      )
+      const rangeHeader =
+        firstDateStr === lastDateStr
+          ? `📅 *${capitalizeFirst(formatDateSafe(sortedSelected[0].start, 'EEEE d MMMM yyyy'))}*`
+          : `🗓️ *Dal ${firstDateStr} al ${lastDateStr}* (${sortedSelected.length} appuntamenti)`
+
+      const lines: string[] = [
+        `🌿 *COME TRALCI • CALENDARIO EVENTI*`,
+        rangeHeader,
+        `━━━━━━━━━━━━━━━━━━━━`,
+      ]
+
+      const groups = new Map<string, AppCalendarEvent[]>()
+      for (const evt of sortedSelected) {
+        const dayKey = formatDateSafe(evt.start, 'yyyy-MM-dd') || evt.start.slice(0, 10)
+        const existing = groups.get(dayKey) || []
+        existing.push(evt)
+        groups.set(dayKey, existing)
+      }
+
+      for (const [, groupEvents] of groups) {
+        const dayTitle = capitalizeFirst(formatDateSafe(groupEvents[0].start, 'EEEE d MMMM yyyy'))
+        lines.push(``)
+        lines.push(`📆 *${dayTitle.toUpperCase()}*`)
+
+        for (const evt of groupEvents) {
+          const timeStr = getEventTimeLabel(evt)
+          const startDay = formatDateSafe(evt.start, 'yyyy-MM-dd')
+          const endDay = formatDateSafe(evt.end || evt.start, 'yyyy-MM-dd')
+          const multiDaySuffix =
+            endDay > startDay ? ` _(fino al ${formatDateSafe(evt.end, 'd MMM')})_` : ''
+          const cats = normalizeCategories(evt)
+            .map((c) => categoryService.getCategoryStyle(c).label)
+            .join(', ')
+
+          lines.push(
+            `• ⏰ *${timeStr}* — *${evt.title}*${multiDaySuffix}${cats ? ` _(${cats})_` : ''}`
+          )
+          if (evt.description && evt.description.trim()) {
+            lines.push(`   📝 ${evt.description.trim()}`)
+          }
+          if (evt.location && evt.location.trim()) {
+            lines.push(`   📍 ${evt.location.trim()}`)
+          }
+        }
+      }
+
+      lines.push(``)
+      lines.push(`━━━━━━━━━━━━━━━━━━━━`)
+      lines.push(`_${APP_CREDITS.organization}_`)
+
+      return lines.join('\n')
+    }
+
     // Condivisione intera giornata
     const targetDate = dayDate || new Date()
-    const dateFormatted = format(targetDate, 'EEEE d MMMM yyyy', { locale: it })
-    const capitalizedDate = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)
+    const capitalizedDate = capitalizeFirst(format(targetDate, 'EEEE d MMMM yyyy', { locale: it }))
 
     const lines: string[] = [
       `🌿 *COME TRALCI • PROGRAMMA DEL GIORNO*`,
@@ -91,9 +162,7 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
 
     const sorted = [...(dayEvents || [])].sort((a, b) => a.start.localeCompare(b.start))
     sorted.forEach((evt, idx) => {
-      const timeStr = evt.allDay
-        ? 'Tutto il giorno'
-        : `${formatTimeSafe(evt.start)}${evt.end ? ` - ${formatTimeSafe(evt.end)}` : ''}`
+      const timeStr = getEventTimeLabel(evt)
       const cats = normalizeCategories(evt)
         .map((c) => categoryService.getCategoryStyle(c).label)
         .join(', ')
@@ -176,18 +245,29 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
 
     const titleText = event
       ? event.title
-      : `Programma di ${format(dayDate || new Date(), 'EEEE d MMMM yyyy', { locale: it })}`
+      : isMultiCalendar
+        ? `Calendario Eventi (${sortedSelected.length})`
+        : `Programma di ${format(dayDate || new Date(), 'EEEE d MMMM yyyy', { locale: it })}`
 
     const descText = event
       ? event.description?.trim() || ''
-      : (dayEvents || [])
-          .map(
-            (e) =>
-              `• ${e.allDay ? 'Tutto il giorno' : formatTimeSafe(e.start)} — ${e.title}${
-                e.description ? `: ${e.description}` : ''
-              }`
-          )
-          .join('\n')
+      : isMultiCalendar
+        ? sortedSelected
+            .map(
+              (e) =>
+                `• ${capitalizeFirst(formatDateSafe(e.start, 'EEE d MMM'))} (${
+                  e.allDay ? 'Tutto il giorno' : formatTimeSafe(e.start)
+                }) — ${e.title}${e.location ? ` 📍 ${e.location}` : ''}`
+            )
+            .join('\n')
+        : (dayEvents || [])
+            .map(
+              (e) =>
+                `• ${e.allDay ? 'Tutto il giorno' : formatTimeSafe(e.start)} — ${e.title}${
+                  e.description ? `: ${e.description}` : ''
+                }`
+            )
+            .join('\n')
 
     const titleLines = wrapText(titleText, width - 140, '900 34px system-ui, -apple-system, sans-serif')
     const descLines = descText
@@ -267,15 +347,24 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
 
     // Box Data & Orario
     let cursorY = cardY + 180
-    const dateStr = event
-      ? formatDateSafe(event.start, 'EEEE d MMMM yyyy')
-      : format(dayDate || new Date(), 'EEEE d MMMM yyyy', { locale: it })
-    const capDate = dateStr.charAt(0).toUpperCase() + dateStr.slice(1)
+    const firstSelectedDate = isMultiCalendar
+      ? capitalizeFirst(formatDateSafe(sortedSelected[0].start, 'd MMM yyyy'))
+      : ''
+    const lastSelectedDate = isMultiCalendar
+      ? capitalizeFirst(formatDateSafe(sortedSelected[sortedSelected.length - 1].start, 'd MMM yyyy'))
+      : ''
+    const capDate = event
+      ? capitalizeFirst(formatDateSafe(event.start, 'EEEE d MMMM yyyy'))
+      : isMultiCalendar
+        ? firstSelectedDate === lastSelectedDate
+          ? capitalizeFirst(formatDateSafe(sortedSelected[0].start, 'EEEE d MMMM yyyy'))
+          : `${firstSelectedDate} - ${lastSelectedDate}`
+        : capitalizeFirst(format(dayDate || new Date(), 'EEEE d MMMM yyyy', { locale: it }))
     const timeStr = event
-      ? event.allDay
-        ? 'Tutto il giorno'
-        : `${formatTimeSafe(event.start)}${event.end ? ` - ${formatTimeSafe(event.end)}` : ''}`
-      : `${(dayEvents || []).length} eventi in programma`
+      ? getEventTimeLabel(event)
+      : isMultiCalendar
+        ? `${sortedSelected.length} eventi selezionati`
+        : `${(dayEvents || []).length} eventi in programma`
 
     ctx.fillStyle = '#f0fdfa'
     ctx.strokeStyle = '#99f6e4'
@@ -349,20 +438,28 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
       const blob = await generateEventCardBlob()
       const fileName = event
         ? `evento_${event.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().slice(0, 25)}.png`
-        : `programma_${format(dayDate || new Date(), 'yyyy-MM-dd')}.png`
+        : isMultiCalendar
+          ? `calendario_memotralci_${format(new Date(), 'yyyy-MM-dd')}.png`
+          : `programma_${format(dayDate || new Date(), 'yyyy-MM-dd')}.png`
+
+      const shareTitle = event
+        ? event.title
+        : isMultiCalendar
+          ? 'Calendario Come Tralci'
+          : 'Programma Come Tralci'
 
       if (blob && navigator.share) {
         const file = new File([blob], fileName, { type: 'image/png' })
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
-            title: event ? event.title : 'Programma Come Tralci',
+            title: shareTitle,
             text: formattedText,
             files: [file],
           })
           return
         }
         await navigator.share({
-          title: event ? event.title : 'Programma Come Tralci',
+          title: shareTitle,
           text: formattedText,
         })
         return
@@ -396,7 +493,9 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
       if (!blob) return
       const fileName = event
         ? `come_tralci_${event.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().slice(0, 25)}.png`
-        : `come_tralci_${format(dayDate || new Date(), 'yyyy-MM-dd')}.png`
+        : isMultiCalendar
+          ? `come_tralci_calendario_${format(new Date(), 'yyyy-MM-dd')}.png`
+          : `come_tralci_${format(dayDate || new Date(), 'yyyy-MM-dd')}.png`
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -412,13 +511,21 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
 
   const displayDateStr = event
     ? formatDateSafe(event.start, 'EEEE d MMMM yyyy')
-    : format(dayDate || new Date(), 'EEEE d MMMM yyyy', { locale: it })
+    : isMultiCalendar
+      ? (() => {
+          const first = formatDateSafe(sortedSelected[0].start, 'd MMM yyyy')
+          const last = formatDateSafe(sortedSelected[sortedSelected.length - 1].start, 'd MMM yyyy')
+          return first === last
+            ? formatDateSafe(sortedSelected[0].start, 'EEEE d MMMM yyyy')
+            : `Dal ${first} al ${last}`
+        })()
+      : format(dayDate || new Date(), 'EEEE d MMMM yyyy', { locale: it })
 
   const displayTimeStr = event
-    ? event.allDay
-      ? 'Tutto il giorno'
-      : `${formatTimeSafe(event.start)}${event.end ? ` - ${formatTimeSafe(event.end)}` : ''}`
-    : `${(dayEvents || []).length} eventi`
+    ? getEventTimeLabel(event)
+    : isMultiCalendar
+      ? `${sortedSelected.length} eventi`
+      : `${(dayEvents || []).length} eventi`
 
   return (
     <div
@@ -449,7 +556,11 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
                 Come Tralci • Promemoria
               </span>
               <h3 className="text-lg sm:text-xl font-black tracking-tight mt-1">
-                {isSingleEvent ? 'Condividi Evento' : 'Condividi Programma del Giorno'}
+                {isSingleEvent
+                  ? 'Condividi Evento'
+                  : isMultiCalendar
+                    ? 'Condividi Calendario Eventi'
+                    : 'Condividi Programma del Giorno'}
               </h3>
               <p className="text-xs text-indigo-100 font-medium">
                 {APP_CREDITS.organization}
@@ -512,6 +623,36 @@ export const ShareEventModal: React.FC<ShareEventModalProps> = ({
                     <span>{event.location}</span>
                   </div>
                 )}
+              </div>
+            ) : isMultiCalendar ? (
+              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                {sortedSelected.map((evt) => (
+                  <div
+                    key={evt.id}
+                    className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 space-y-1"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-black">
+                      <span className="text-teal-700 dark:text-teal-300 capitalize">
+                        {formatDateSafe(evt.start, 'EEE d MMM yyyy')}
+                      </span>
+                      <span className="text-indigo-600 dark:text-indigo-400">
+                        {getEventTimeLabel(evt)}
+                      </span>
+                    </div>
+                    <p className="font-black text-sm text-slate-900 dark:text-white">{evt.title}</p>
+                    {evt.description && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line">
+                        {evt.description}
+                      </p>
+                    )}
+                    {evt.location && (
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center space-x-1">
+                        <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                        <span>{evt.location}</span>
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="space-y-2.5">
